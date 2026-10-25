@@ -164,6 +164,15 @@ case "$step" in
       else echo "NOT INSTALLED: Proton $app"; fi
     done
     ;;
+  cleanup-removed)
+    # Files a removed package left behind outside dpkg's knowledge (WPS unpacks add-ons
+    # into /var/opt/kingsoft). Removed only when the package is gone and dpkg owns nothing there.
+    if ! dpkg-query -W -f='${db:Status-Abbrev}' wps-office 2>/dev/null | grep -q '^ii'; then
+      for d in /var/opt/kingsoft /opt/kingsoft; do
+        if [ -d "$d" ] && ! dpkg -S "$d" >/dev/null 2>&1; then rm -rf "$d"; echo "removed leftover $d"; fi
+      done
+    fi
+    ;;
   simulate-purge)
     apt-get -s purge "$@"
     ;;

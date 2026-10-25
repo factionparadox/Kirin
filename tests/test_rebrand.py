@@ -56,11 +56,11 @@ class TestRebrand(unittest.TestCase):
         quiet(rebrand.main, ['--root', str(self.root), '--apply'])
         osr = (self.root / 'usr/lib/os-release').read_text()
         self.assertIn('NAME="Kirin Linux"', osr)
-        self.assertIn('PRETTY_NAME="Kirin Linux (openKylin 3.0 base)"', osr)
+        self.assertIn('PRETTY_NAME="Kirin Linux 1.0 (openKylin 3.0 base)"', osr)
         self.assertIn('ID=openkylin', osr)                            # updater and packages still recognise it
         self.assertTrue((self.root / 'etc/os-release').is_symlink())  # link preserved, target edited
         self.assertIn('DISTRIB_ID=openKylin', (self.root / 'etc/lsb-release').read_text())
-        self.assertIn('Kirin Linux (openKylin 3.0 base)', (self.root / 'etc/lsb-release').read_text())
+        self.assertIn('Kirin Linux 1.0 (openKylin 3.0 base)', (self.root / 'etc/lsb-release').read_text())
 
     def test_installs_assets(self):
         quiet(rebrand.main, ['--root', str(self.root), '--apply'])

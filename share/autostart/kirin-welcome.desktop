@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Welcome to Kirin
+Name[ru]=Добро пожаловать в Kirin
+Comment=Shown once at first login
+Comment[ru]=Показывается один раз при первом входе
+Exec=kirin-welcome --autostart
+Icon=kirin
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

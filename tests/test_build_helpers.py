@@ -63,6 +63,12 @@ class TestInventory(TempRoot):
         self.assertEqual(set(found), {'opt/kylin-ai/asr/encoder.onnx', 'usr/share/kylinbot/models/weights.bin',
                                       'usr/share/kylin-ai/llm/weights'})
 
+    def test_excluded_prefixes_left_out(self):
+        self.put('var/opt/kingsoft/wps-office/office6/addons/ktoast/text_detect.tflite', 8192)
+        self.put('usr/share/kylin-ai/model-repository/ocr/1/model.onnx', 8192)
+        found = dict(inventory.scan(self.root, ('var/opt/kingsoft/',)))
+        self.assertEqual(set(found), {'usr/share/kylin-ai/model-repository/ocr/1/model.onnx'})
+
     def test_does_not_follow_symlinks(self):
         outside = Path(self.temp.name) / 'outside'
         outside.mkdir()

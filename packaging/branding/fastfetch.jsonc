@@ -11,7 +11,7 @@
   "modules": [
     "title",
     "separator",
-    { "type": "os", "format": "Kirin Linux (openKylin {version-id} base) {arch}" },
+    { "type": "os", "format": "Kirin Linux 1.0 (openKylin {version-id} base) {arch}" },
     "host",
     "kernel",
     "uptime",

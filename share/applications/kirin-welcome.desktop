@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Welcome to Kirin
+Name[ru]=Добро пожаловать в Kirin
+Comment=Start here: lessons, Russian study, AI chat and apps
+Comment[ru]=Начните здесь: уроки, русский язык, ИИ-чат и приложения
+Exec=kirin-welcome
+Icon=kirin
+Terminal=false
+Categories=Education;Utility;

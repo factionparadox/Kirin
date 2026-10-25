@@ -16,6 +16,10 @@ kylin-id?
 # the purge is refused if it would remove any package that owns an upstream model.
 kylin-aiassistant?
 
+# WPS Office; LibreOffice replaces it. Its add-on AI models in /var/opt/kingsoft are
+# excluded from the protected inventory (build/model-exclusions.txt) and removed with it.
+wps-office?
+
 # Software Store: candidate names from scripts/audit-software-image.py
 kylin-software-center
 ubuntu-kylin-software-center

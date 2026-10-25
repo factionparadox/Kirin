@@ -282,7 +282,8 @@ stage_inventory() {
     [ "$MODEL_INVENTORY" -ef "$inv" ] || cp "$MODEL_INVENTORY" "$inv"
     python3 "$REPO/scripts/build/inventory-models.py" --root "$ROOTFS" --inventory "$inv" --owners-out "$owners" || rc=$?
   else
-    python3 "$REPO/scripts/build/inventory-models.py" --root "$ROOTFS" --out "$inv" --owners-out "$owners" || rc=$?
+    python3 "$REPO/scripts/build/inventory-models.py" --root "$ROOTFS" --out "$inv" --owners-out "$owners" \
+        --exclude-file "$HERE/model-exclusions.txt" || rc=$?
   fi
   [ "$rc" -eq 0 ] || die 'model inventory failed or found nothing; see above'
   # Prove the inventory matches the untouched upstream root before anything changes.
@@ -541,7 +542,8 @@ stage_customise() {
 
   mount_chroot
   info 'installing base packages'; in_chroot install
-  info 'removing Token Centre, Software Store, Kylin ID and the openKylin AI assistant app'; purge_reviewed
+  info 'removing Token Centre, Software Store, Kylin ID, WPS Office and the openKylin AI assistant app'; purge_reviewed
+  in_chroot cleanup-removed | sed 's/^/    /'
   if [ "$NO_EXTRA_REPOS" -eq 0 ]; then
     info 'adding pinned Ubuntu 26.04 and Debian 13 repositories'
     in_chroot extra-repos | tee "$AUDIT/extra-repos.log" | sed 's/^/    /'
@@ -577,6 +579,8 @@ stage_customise() {
 
   info 'applying Kirin branding'
   python3 "$REPO/scripts/kirin-rebrand.py" --root "$ROOTFS" --apply | sed 's/^/    /'
+  info 'applying Kirin defaults (version, hostname, default apps, taskbar, Fastfetch)'
+  python3 "$REPO/scripts/kirin-polish.py" --root "$ROOTFS" --apply | tee "$AUDIT/defaults.log" | sed 's/^/    /'
 
   in_chroot finish | tee "$AUDIT/finish.log"
   in_chroot manifest > "$WORK/filesystem.manifest"
@@ -611,6 +615,7 @@ stage_audit() {
   run_audit accounts python3 "$REPO/scripts/audit-online-accounts.py" --root "$ROOTFS"
   run_audit russian audit_russian
   run_audit branding python3 "$REPO/scripts/kirin-rebrand.py" --root "$ROOTFS" --audit
+  run_audit defaults python3 "$REPO/scripts/kirin-polish.py" --root "$ROOTFS" --audit
   grep -q '^FAIL ai-payload' "$summary" && die 'AI payload contract failed; this is never waived'
   if [ "$failed" -eq 1 ] && [ "$TEST_BUILD" -ne 1 ]; then
     die 'policy audits failed; fix them, or pass --test-build for an unverified test image'

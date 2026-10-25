@@ -65,7 +65,7 @@ def check_root(root: Path) -> Path:
     return root
 
 
-def scan(root: Path) -> list[tuple[str, int]]:
+def scan(root: Path, exclude: tuple[str, ...] = ()) -> list[tuple[str, int]]:
     found = []
     for current, dirs, files in os.walk(root, followlinks=False):
         rel_dir = os.path.relpath(current, root)
@@ -73,7 +73,7 @@ def scan(root: Path) -> list[tuple[str, int]]:
         keep = []
         for d in dirs:
             rel = f'{rel_dir}/{d}' if rel_dir else d
-            if (not rel_dir and d in SKIP_TOP) or rel.startswith(SKIP_PREFIXES):
+            if (not rel_dir and d in SKIP_TOP) or rel.startswith(SKIP_PREFIXES) or (rel + '/').startswith(exclude):
                 continue
             if os.path.islink(os.path.join(current, d)):
                 continue
@@ -84,6 +84,8 @@ def scan(root: Path) -> list[tuple[str, int]]:
             if os.path.islink(path) or not os.path.isfile(path):
                 continue
             rel = f'{rel_dir}/{name}' if rel_dir else name
+            if rel.startswith(exclude):
+                continue
             size = os.path.getsize(path)
             if is_candidate(rel, size):
                 found.append((rel, size))
@@ -116,11 +118,17 @@ def main(argv=None) -> int:
     ap.add_argument('--root', type=Path, required=True)
     ap.add_argument('--out', type=Path, help='write {path: sha256} inventory here')
     ap.add_argument('--owners-out', type=Path, required=True, help='write path → package/size report here')
+    ap.add_argument('--exclude-file', type=Path,
+                    help='file of path prefixes (one per line, # comments) to leave out, e.g. apps Kirin removes')
     ap.add_argument('--inventory', type=Path,
                     help='use this reviewed inventory instead of scanning; only write the ownership report')
     args = ap.parse_args(argv)
     try:
         root = check_root(args.root)
+        exclude = ()
+        if args.exclude_file:
+            exclude = tuple(l.strip().lstrip('/') for l in args.exclude_file.read_text(encoding='utf-8').splitlines()
+                            if l.strip() and not l.lstrip().startswith('#'))
         if args.inventory:
             reviewed = json.loads(args.inventory.read_text(encoding='utf-8'))
             if not isinstance(reviewed, dict) or not reviewed:
@@ -130,7 +138,7 @@ def main(argv=None) -> int:
         else:
             if not args.out:
                 raise ValueError('--out is required when scanning')
-            entries = scan(root)
+            entries = scan(root, exclude)
             inventory = {rel: digest(root / rel) for rel, _ in entries}
         owned = owners(root)
         report = {rel: {'size': size, 'package': owned.get(rel)} for rel, size in entries}

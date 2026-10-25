@@ -47,6 +47,8 @@ class KirinLearnTests(unittest.TestCase):
             self.assertTrue((Path(td)/'usr/share/nvim/site/tutor/kirin-01-basics.tutor').exists())
             self.assertEqual(len(list((Path(td)/'usr/share/kirin/learn/topics').glob('*.md'))), 7)
             self.assertTrue((Path(td)/'usr/share/applications/kirin-russian-tutor.desktop').exists())
+            self.assertTrue((Path(td)/'usr/bin/kirin-welcome').exists())
+            self.assertTrue((Path(td)/'etc/xdg/autostart/kirin-welcome.desktop').exists())
 
 
 class FakeResponse(io.BytesIO):
@@ -122,3 +124,44 @@ def subprocess_result(code):
     return SimpleNamespace(returncode=code, stderr=b'')
 
 if __name__ == '__main__': unittest.main()
+
+
+welcome_spec = importlib.util.spec_from_file_location('kirin_welcome', ROOT / 'kirin_welcome.py')
+welcome = importlib.util.module_from_spec(welcome_spec)
+welcome_spec.loader.exec_module(welcome)
+
+
+class WelcomeTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
+        base = Path(self.temp.name)
+        self.apps = base / 'apps'; self.apps.mkdir()
+        (self.apps / 'kirin-learn.desktop').write_text('[Desktop Entry]\n')
+        (self.apps / 'com.jeffser.Alpaca.desktop').write_text('[Desktop Entry]\n')
+        for name, value in (('APP_DIRS', (self.apps,)), ('STATE', base / 'state'), ('DONE', base / 'state/welcome-done'),
+                            ('ALWAYS', base / 'state/welcome-always'), ('NO_FASTFETCH', base / 'state/no-fastfetch')):
+            p = patch.object(welcome, name, value); p.start(); self.addCleanup(p.stop)
+
+    def test_lists_only_installed_items(self):
+        titles = [t for _, t, _ in welcome.available_items('en')]
+        self.assertEqual(titles, ['Learn Linux', 'AI chat'])
+        self.assertEqual([t for _, t, _ in welcome.available_items('ru')], ['Изучить Linux', 'ИИ-чат'])
+
+    def test_shows_once_unless_asked(self):
+        self.assertTrue(welcome.should_autostart())
+        welcome.set_flag(welcome.DONE, True)
+        self.assertFalse(welcome.should_autostart())
+        welcome.set_flag(welcome.ALWAYS, True)
+        self.assertTrue(welcome.should_autostart())
+
+    def test_language_from_environment(self):
+        with patch.dict(welcome.os.environ, {'LANGUAGE': 'ru_RU:ru', 'LANG': 'en_GB.UTF-8'}):
+            self.assertEqual(welcome.language(), 'ru')
+        with patch.dict(welcome.os.environ, {'LANGUAGE': '', 'LC_ALL': '', 'LC_MESSAGES': '', 'LANG': 'en_GB.UTF-8'}):
+            self.assertEqual(welcome.language(), 'en')
+
+    def test_text_fallback_marks_seen(self):
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            welcome.run_text('en')
+        self.assertIn('Welcome to Kirin Linux', out.getvalue())
+        self.assertFalse(welcome.should_autostart())

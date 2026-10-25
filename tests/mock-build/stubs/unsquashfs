@@ -15,10 +15,14 @@ if a[0] == '-d':
     assert Path(a[2]).read_bytes() == Path(os.environ['MOCK_STATE'], 'squashfs.full').read_bytes(), 'unpacking a damaged squashfs'
     for d in ('var/lib/dpkg/info', 'opt/kylin-ai', 'etc', 'usr/sbin', 'usr/share/applications', 'run/systemd/resolve'):
         (r / d).mkdir(parents=True, exist_ok=True)
-    pk = ['apt', 'dpkg', 'kylin-ai', 'openkylin-token-center', 'openkylin-desktop-meta', 'kylin-id']
+    pk = ['apt', 'dpkg', 'kylin-ai', 'openkylin-token-center', 'openkylin-desktop-meta', 'kylin-id', 'wps-office']
     (r / 'var/lib/dpkg/status').write_text(''.join(f'Package: {p}\nStatus: install ok installed\nVersion: 1\n\n' for p in pk))
     (r / 'var/lib/dpkg/info/kylin-ai.list').write_text('/opt/kylin-ai/asr.onnx\n')
     (r / 'opt/kylin-ai/asr.onnx').write_bytes(os.urandom(8192))
+    (r / 'var/opt/kingsoft/addons').mkdir(parents=True)
+    (r / 'var/opt/kingsoft/addons/text_detect.tflite').write_bytes(os.urandom(8192))
+    (r / 'etc/bash.bashrc').write_text('# bashrc\n')
+    (r / 'etc/hostname').write_text('localhost.localdomain\n')
     (r / 'usr/share/applications/files.desktop').write_text('[Desktop Entry]\nName=Files\n')
     (r / 'usr/share/applications/kylin-music.desktop').write_text('[Desktop Entry]\nName=Kylin Music\nExec=kylin-music\n')
     (r / 'usr/lib').mkdir(parents=True, exist_ok=True)

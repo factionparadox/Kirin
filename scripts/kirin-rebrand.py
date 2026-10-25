@@ -24,6 +24,7 @@ import sys
 REPO = Path(__file__).resolve().parents[1]
 BRANDING = REPO / 'packaging/branding'
 OS_NAME = 'Kirin Linux'
+KIRIN_VERSION = '1.0'
 DISPLAY_KEY = re.compile(r'^((?:Name|GenericName|Comment|Keywords|X-[A-Za-z-]*Name)(?:\[[^\]]+\])?)=(.*)$')
 KYLIN = re.compile(r'(?<![A-Za-z])(?:open[Kk]ylin|OPENKYLIN|Kylin|KYLIN|kylin)(?![A-Za-z])')
 DESKTOP_DIRS = ('usr/share/applications', 'etc/xdg/autostart', 'usr/share/desktop-directories')
@@ -124,7 +125,7 @@ def set_keys(text: str, values: dict[str, str]) -> str:
 def os_release_values(text: str) -> dict[str, str]:
     version = re.search(r'^VERSION_ID="?([^"\n]*)"?', text, re.M)
     base = f'openKylin {version.group(1)}' if version else 'openKylin'
-    return {'NAME': OS_NAME, 'PRETTY_NAME': f'{OS_NAME} ({base} base)',
+    return {'NAME': OS_NAME, 'PRETTY_NAME': f'{OS_NAME} {KIRIN_VERSION} ({base} base)',
             'VARIANT': OS_NAME, 'VARIANT_ID': 'kirin',
             'HOME_URL': 'https://github.com/factionparadox/Kirin'}
 
@@ -160,7 +161,7 @@ def apply(root: Path) -> list[str]:
         text = lsb.read_text(encoding='utf-8')
         version = re.search(r'^DISTRIB_RELEASE="?([^"\n]*)"?', text, re.M)
         base = f'openKylin {version.group(1)}' if version else 'openKylin'
-        lsb.write_text(set_keys(text, {'DISTRIB_DESCRIPTION': f'{OS_NAME} ({base} base)'}), encoding='utf-8')
+        lsb.write_text(set_keys(text, {'DISTRIB_DESCRIPTION': f'{OS_NAME} {KIRIN_VERSION} ({base} base)'}), encoding='utf-8')
     grub = inside(root, 'etc/default/grub.d/90-kirin.cfg')
     grub.parent.mkdir(parents=True, exist_ok=True)
     grub.write_text(f'# Kirin branding for boot menu entries\nGRUB_DISTRIBUTOR="{OS_NAME}"\n', encoding='utf-8')

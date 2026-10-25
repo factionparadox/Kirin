@@ -77,6 +77,7 @@ set +e; "$REPO/build/kirin-build.sh" --iso "$T/upstream.iso" --work "$T/work" --
 grep -q 'came out incomplete' "$T/log1" && grep -q 'recovered 307200 bytes' "$T/log1" || { cat "$T/log1"; fail 'short squashfs not recovered'; }
 cmp -s "$T/work/iso/casper/filesystem.squashfs" "$MOCK_STATE/squashfs.full" || fail 'recovered squashfs differs'
 grep -q 'opt/kylin-ai/asr.onnx' "$T/work/upstream/upstream-models.json" || fail 'model not inventoried'
+grep -q 'kingsoft' "$T/work/upstream/upstream-models.json" && fail 'excluded WPS model was inventoried'
 [ ! -e "$T/work/.done-customise" ] || fail 'image modified before review'
 
 echo '--- 3. unrequested removal blocks the purge'
@@ -127,6 +128,13 @@ python3 -c 'import json,sys; c=json.load(open(sys.argv[1])); assert c["model"].s
   "$R/usr/share/kirin/russian.json" || fail 'russian.json wrong'
 grep -q 'PASS russian' "$T/work/audit/summary" || fail 'russian audit did not pass'
 grep -q 'PASS branding' "$T/work/audit/summary" || fail 'branding audit did not pass'
+grep -q 'PASS defaults' "$T/work/audit/summary" || fail 'defaults audit did not pass'
+grep -q 'Package: wps-office$' "$R/var/lib/dpkg/status" && fail 'WPS Office still installed'
+[ ! -e "$R/var/opt/kingsoft" ] || fail 'WPS leftovers not removed'
+[ "$(cat "$R/etc/hostname")" = kirin ] || fail 'hostname not kirin'
+grep -q 'Kirin: Fastfetch' "$R/etc/bash.bashrc" || fail 'Fastfetch hook missing'
+[ -x "$R/usr/bin/kirin-welcome" ] && [ -f "$R/etc/xdg/autostart/kirin-welcome.desktop" ] || fail 'Welcome app not installed'
+[ -f "$R/etc/skel/.config/org.ukui/_ukui-config-global/org.ukui.panel.taskManager.json" ] || fail 'taskbar pins missing'
 grep -q '^Name=Kirin Music$' "$R/usr/share/applications/kylin-music.desktop" || fail 'menu name not rebranded'
 grep -q 'NAME="Kirin Linux"' "$R/usr/lib/os-release" || fail 'os-release not rebranded'
 [ -f "$R/etc/xdg/fastfetch/config.jsonc" ] && [ -f "$R/usr/share/plymouth/themes/kirin/splash.png" ] || fail 'branding files missing'

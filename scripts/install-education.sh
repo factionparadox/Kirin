@@ -6,6 +6,8 @@ root=${DESTDIR:?Set DESTDIR to a disposable packaging directory}
 case "$root" in /*) ;; *) echo 'DESTDIR must be absolute' >&2; exit 2;; esac
 [ "$root" != / ] || { echo 'Refusing to install into /' >&2; exit 2; }
 install -D -m 0755 "$here/kirin_learn.py" "$root/usr/bin/kirin-learn"
+install -D -m 0755 "$here/kirin_welcome.py" "$root/usr/bin/kirin-welcome"
+install -D -m 0644 "$here/share/autostart/kirin-welcome.desktop" "$root/etc/xdg/autostart/kirin-welcome.desktop"
 for lesson in "$here"/lessons/*.md; do
   install -D -m 0644 "$lesson" "$root/usr/share/kirin/learn/topics/$(basename "$lesson")"
 done

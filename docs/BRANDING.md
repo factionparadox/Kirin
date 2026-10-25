@@ -16,3 +16,17 @@ Applied to the image by `scripts/kirin-rebrand.py` and checked by the `branding`
 | Fastfetch package | openKylin 3.0 does not ship Fastfetch; it is installed from `packaging/extra-packages.txt` after the pinned Ubuntu/Debian repositories are added. |
 
 openKylin's AI assistant supports custom "private" models through Settings → AI, but stores them through its own runtime, so Kirin documents the one-time setup (`kirin-learn learn ai`) rather than writing undocumented config. Alpaca is pre-connected.
+
+## Desktop defaults
+
+Applied by `scripts/kirin-polish.py` and checked by the `defaults` audit.
+
+| What | How |
+| --- | --- |
+| Version | Kirin Linux 1.0: in os-release `PRETTY_NAME`, lsb-release, Fastfetch and `/etc/kirin-release`. |
+| Hostname | `kirin`; the live session's user and host are `kirin` too (`/etc/casper.conf`, with `FLAVOUR` set so casper honours them). |
+| Welcome to Kirin | `kirin-welcome` (GTK 3), started once at first login by `/etc/xdg/autostart/kirin-welcome.desktop`, and in the menu. Links Kirin Learn, the Russian tutor, courses and dictionary, Alpaca, Warehouse, LibreOffice and Settings; English or Russian by session language. |
+| Taskbar | New users get Files, Terminal, Alpaca, LibreOffice, VLC, Kirin Learn and Settings pinned (UKUI `org.ukui.panel.taskManager` `quickLaunchers` in `/etc/skel`); apps that are not installed are skipped. |
+| Default apps | `ukui-mimeapps.list` and `mimeapps.list`: WPS Office's Writer/Spreadsheet/Presentation/PDF handlers become LibreOffice's (PDF: the first installed viewer), and openKylin's music and video players become VLC. Only mappings whose target is installed change. |
+| WPS Office | Removed (optional reviewed purge) with its add-on models in `/var/opt/kingsoft`, which `build/model-exclusions.txt` leaves out of the protected inventory. |
+| Fastfetch | Runs when an interactive terminal opens (`/etc/bash.bashrc`). Turn off in Welcome to Kirin, or `touch ~/.config/kirin/no-fastfetch`. |

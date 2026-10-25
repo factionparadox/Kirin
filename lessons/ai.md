@@ -12,7 +12,7 @@ Only that explicit question is sent to the **local loopback Ollama API**, not to
 
 ## Use Kirin's models in the Kirin AI Assistant
 
-Kirin's models also work in the desktop **Kirin AI Assistant** (openKylin's assistant, formerly "Xiao K"). It does not find Ollama by itself; add it once as a custom model:
+Kirin normally replaces openKylin's assistant ("Xiao K") with **Alpaca**, which is already connected. If your build kept the assistant, it can use Kirin's models too; it does not find Ollama by itself, so add it once as a custom model:
 
 1. Open **Settings → AI** (model configuration) and choose to add a **custom / private model** ("deployed on the enterprise intranet or local server").
 2. Fill in:

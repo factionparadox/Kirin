@@ -1,0 +1,6 @@
+# Path prefixes left out of the protected upstream AI-model inventory, with the reason.
+# Everything else that looks like a model stays protected and must survive the build unchanged.
+
+# WPS Office's add-on models (OCR, page scanning); Kirin removes WPS Office for LibreOffice.
+var/opt/kingsoft/
+opt/kingsoft/
