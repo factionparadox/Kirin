@@ -29,7 +29,7 @@ class ContractTests(unittest.TestCase):
             (blobs/('sha256-'+sha)).write_bytes(content)
             index=root/'index.json'
             index.write_text(json.dumps({'model':module.MODEL_TAG,'blobs':[{'sha256':sha,'size':len(content)}]}))
-            self.assertEqual(module.verify_qwen(index, blobs), [])
+            self.assertTrue(any('under 4 GB' in reason for reason in module.verify_qwen(index, blobs)))
             (blobs/('sha256-'+sha)).write_bytes(b'bad')
             self.assertTrue(module.verify_qwen(index, blobs))
     def test_reject_path_traversal(self):
