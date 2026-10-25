@@ -1,0 +1,3 @@
+# Installed after the pinned Ubuntu/Debian repositories are added, so each comes from
+# openKylin if it has it and otherwise from Ubuntu 26.04 or Debian 13. Not fatal if missing.
+fastfetch

@@ -112,6 +112,19 @@ case "$step" in
     # shellcheck disable=SC2046,SC2086
     apt-get install -y --no-install-recommends $apt_opts $(list /kirin-build/base-packages.txt) locales
     ;;
+  install-extras)
+    # Packages openKylin may lack; each comes from openKylin if it has it, otherwise
+    # from the pinned Ubuntu/Debian repositories. A missing one is reported, not fatal.
+    apt-get update -q >/dev/null 2>&1 || true
+    for p in $(list /kirin-build/extra-packages.txt); do
+      # shellcheck disable=SC2086
+      if apt-get install -y -q --no-install-recommends $apt_opts "$p" >/dev/null 2>&1; then
+        echo "installed $p from $(apt-cache policy "$p" | awk '/\*\*\*/{getline; print $2" "$3; exit}')"
+      else
+        echo "NOT AVAILABLE: $p"
+      fi
+    done
+    ;;
   simulate-purge)
     apt-get -s purge "$@"
     ;;

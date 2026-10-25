@@ -1,0 +1,10 @@
+{
+  "_comment": "Menu names for launchers whose upstream name does not rebrand cleanly. Keyed by .desktop file name; 'en' replaces Name=, 'ru' sets Name[ru]=. Applied by scripts/kirin-rebrand.py before the general Kylin -> Kirin rename.",
+  "kylin-os-installer.desktop": {"en": "Install Kirin Linux", "ru": "Установить Kirin Linux"},
+  "kylin-installer.desktop": {"en": "Kirin Package Installer", "ru": "Установщик пакетов Kirin"},
+  "kylin-os-manager.desktop": {"en": "Kirin OS Manager", "ru": "Диспетчер системы Kirin"},
+  "kylin-fix-boot-grub.desktop": {"en": "Kirin Boot Repair", "ru": "Восстановление загрузки Kirin"},
+  "kylin-aiassistant.desktop": {"en": "Kirin AI Assistant", "ru": "ИИ-помощник Kirin"},
+  "kylin-user-guide.desktop": {"en": "Kirin Manual", "ru": "Руководство Kirin"},
+  "app.web.openkylincommunity.desktop": {"en": "Upstream Community (web)", "ru": "Сообщество разработчиков (веб)"}
+}

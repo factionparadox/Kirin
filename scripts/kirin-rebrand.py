@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from pathlib import Path
 import re
@@ -53,7 +54,35 @@ def inside(root: Path, rel: str) -> Path:
     return path
 
 
-def rebrand_desktop(text: str) -> str:
+def load_names(path: Path = BRANDING / 'desktop-names.json') -> dict:
+    if not path.is_file():
+        return {}
+    return {k: v for k, v in json.loads(path.read_text(encoding='utf-8')).items() if not k.startswith('_')}
+
+
+def rename(text: str, names: dict) -> str:
+    """Set Name= (and Name[ru]=) from an explicit override."""
+    out, have_ru = [], False
+    in_entry = False
+    for line in text.splitlines(keepends=True):
+        stripped = line.strip()
+        if stripped.startswith('['):
+            if in_entry and names.get('ru') and not have_ru:
+                out.append(f'Name[ru]={names["ru"]}\n')
+            in_entry = stripped == '[Desktop Entry]'
+        elif in_entry and stripped.startswith('Name='):
+            line = f'Name={names["en"]}\n'
+        elif in_entry and stripped.startswith('Name[ru]=') and names.get('ru'):
+            line, have_ru = f'Name[ru]={names["ru"]}\n', True
+        out.append(line)
+    if in_entry and names.get('ru') and not have_ru:
+        out.append(f'Name[ru]={names["ru"]}\n')
+    return ''.join(out)
+
+
+def rebrand_desktop(text: str, names: dict | None = None) -> str:
+    if names:
+        text = rename(text, names)
     out = []
     for line in text.splitlines(keepends=True):
         m = DISPLAY_KEY.match(line.rstrip('\r\n'))
@@ -65,6 +94,7 @@ def rebrand_desktop(text: str) -> str:
 
 
 def desktop_changes(root: Path):
+    overrides = load_names()
     for rel in DESKTOP_DIRS:
         folder = root / rel
         if not folder.is_dir() or folder.is_symlink():
@@ -73,7 +103,7 @@ def desktop_changes(root: Path):
             if p.is_symlink() or not p.is_file():
                 continue
             raw = p.read_text(encoding='utf-8', errors='surrogateescape')
-            new = rebrand_desktop(raw)
+            new = rebrand_desktop(raw, overrides.get(p.name))
             if new != raw:
                 yield p, new
 

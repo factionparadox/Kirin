@@ -22,6 +22,7 @@ qwen = load('qwen-index')
 removal = load('check-removal')
 recovery = load('recover-squashfs')
 alpaca = load('seed-alpaca')
+bootcfg = load('iso-boot-config')
 
 
 def quiet(fn, *args):
@@ -238,6 +239,38 @@ class TestAlpacaSeed(TempRoot):
     def test_refuses_live_root(self):
         with self.assertRaises(ValueError):
             alpaca.seed(Path('/'), 'x')
+
+
+class TestIsoBootConfig(TempRoot):
+    GRUB = Path(__file__).resolve().parent / 'fixtures/openkylin-3.0-grub.cfg'
+
+    def test_real_openkylin_grub_menu(self):
+        new, notes = bootcfg.rewrite(self.GRUB.read_text(), '/boot/grub/kirin-background.png')
+        self.assertNotIn('zh_CN', new)
+        self.assertEqual(new.count('locale=en_GB.UTF-8 keyboard-configuration/layoutcode=gb'), 3)
+        self.assertIn('menuentry "Install Kirin Linux" {', new)
+        self.assertIn('menuentry "Try without installing" {', new)
+        self.assertIn('background_image /boot/grub/kirin-background.png', new)
+        self.assertIn('initrd\t\t/casper/initrd.lz', new)       # boot paths untouched
+        self.assertIn('only-ubiquity', new)
+        self.assertEqual(notes, [])
+
+    def test_writes_only_changed_configs_and_flags_chinese(self):
+        tree = self.root / 'iso'
+        (tree / 'boot/grub').mkdir(parents=True)
+        (tree / 'isolinux').mkdir()
+        (tree / 'boot/grub/grub.cfg').write_text(self.GRUB.read_text())
+        (tree / 'isolinux/txt.cfg').write_text('label live\n  menu label ^试用 openKylin\n  append locale=zh_CN.UTF-8 boot=casper\n')
+        (tree / 'isolinux/plain.cfg').write_text('default vesamenu.c32\n')
+        out = self.root / 'out'
+        err, stdout = io.StringIO(), io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(err):
+            self.assertEqual(bootcfg.main(['--iso-tree', str(tree), '--out', str(out)]), 0)
+        self.assertEqual(stdout.getvalue().split(), ['boot/grub/grub.cfg', 'isolinux/txt.cfg'])
+        self.assertIn('menu label ^试用 Kirin Linux', (out / 'isolinux/txt.cfg').read_text())
+        self.assertIn('untranslated menu text', err.getvalue())
+        self.assertFalse((out / 'isolinux/plain.cfg').exists())
+        self.assertIn('zh_CN', (tree / 'boot/grub/grub.cfg').read_text())   # source tree untouched
 
 
 if __name__ == '__main__':

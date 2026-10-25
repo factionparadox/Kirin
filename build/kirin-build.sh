@@ -140,7 +140,8 @@ mount_chroot() {
 
   mkdir -p "$ROOTFS/kirin-build"
   install -m 0755 "$HERE/chroot-steps.sh" "$ROOTFS/kirin-build/chroot-steps.sh"
-  install -m 0644 "$REPO/packaging/base-packages.txt" "$REPO/packaging/flatpak-apps.txt" "$ROOTFS/kirin-build/"
+  install -m 0644 "$REPO/packaging/base-packages.txt" "$REPO/packaging/flatpak-apps.txt" \
+    "$REPO/packaging/extra-packages.txt" "$ROOTFS/kirin-build/"
   [ ! -f "$PAYLOADS/libfyaml-$FYAML_VERSION.tar.gz" ] ||
     install -m 0644 "$PAYLOADS/libfyaml-$FYAML_VERSION.tar.gz" "$ROOTFS/kirin-build/"
   mkdir -p "$ROOTFS/kirin-build/extra-repos"
@@ -512,6 +513,8 @@ stage_customise() {
     info 'adding pinned Ubuntu 26.04 and Debian 13 repositories'
     in_chroot extra-repos | tee "$AUDIT/extra-repos.log" | sed 's/^/    /'
   fi
+  info 'installing extra packages (Fastfetch and others openKylin may lack)'
+  in_chroot install-extras | tee "$AUDIT/extra-packages.log" | sed 's/^/    /'
   info 'installing Warehouse, Flatseal, Kiwix and Alpaca system-wide'; in_chroot flatpak "$RUSSIAN_DIR"
   local chat_model=$QWEN_TAG
   [ "$NO_RUSSIAN" -eq 1 ] || chat_model=$TUTOR_TAG
@@ -606,27 +609,48 @@ stage_pack() {
     md5pairs+=("$WORK/live-initrd=/$initrd_rel")
     info "live session gets the Kirin boot splash ($initrd_rel)"
   fi
-  if [ -f "$ISOTREE/md5sum.txt" ]; then
-    python3 - "$ISOTREE/md5sum.txt" "$WORK/md5sum.txt" "${md5pairs[@]}" <<'PY'
-import hashlib, sys
+  # Kirin boot menus: British English locale, Kirin names and artwork (scripts/build/iso-boot-config.py).
+  local boot="$WORK/iso-boot" rel
+  python3 "$REPO/scripts/build/iso-boot-config.py" --iso-tree "$ISOTREE" --out "$boot" \
+      --grub-background /boot/grub/kirin-background.png > "$WORK/iso-boot.list"
+  while IFS= read -r rel; do
+    [ -n "$rel" ] || continue
+    maps+=(-map "$boot/$rel" "/$rel"); md5pairs+=("$boot/$rel=/$rel")
+    info "boot menu updated: $rel"
+  done < "$WORK/iso-boot.list"
+  maps+=(-map "$REPO/packaging/branding/grub-background.png" /boot/grub/kirin-background.png)
+  local art
+  for art in isolinux/splash.png:isolinux-splash.png isolinux/back.jpg:isolinux-back.jpg; do
+    if [ -f "$ISOTREE/${art%%:*}" ]; then
+      maps+=(-map "$REPO/packaging/branding/${art##*:}" "/${art%%:*}")
+      md5pairs+=("$REPO/packaging/branding/${art##*:}=/${art%%:*}")
+    fi
+  done
+  local sums
+  for sums in md5sum.txt SHA256SUMS; do
+    [ -f "$ISOTREE/$sums" ] || continue
+    python3 - "$ISOTREE/$sums" "$WORK/$sums" "${md5pairs[@]}" <<'PY'
+import hashlib, re, sys
 from pathlib import Path
 src, out, *pairs = sys.argv[1:]
-changed = {}
+algo = 'sha256' if 'SHA256' in Path(src).name.upper() else 'md5'
+digests = {}
 for pair in pairs:
     local, iso = pair.split('=', 1)
     if Path(local).is_file():
-        h = hashlib.md5()
+        h = hashlib.new(algo)
         with open(local, 'rb') as f:
             for chunk in iter(lambda: f.read(1 << 20), b''): h.update(chunk)
-        changed['.' + iso] = h.hexdigest()
+        digests[iso.lstrip('/')] = h.hexdigest()
 lines = []
-for line in Path(src).read_text().splitlines():
-    digest, _, name = line.partition('  ')
-    lines.append(f'{changed[name]}  {name}' if name in changed else line)
+for line in Path(src).read_text(errors='replace').splitlines():
+    m = re.match(r'^([0-9a-fA-F]+)( [ *])(.*)$', line)
+    key = m.group(3).removeprefix('./').lstrip('/') if m else None
+    lines.append(f'{digests[key]}{m.group(2)}{m.group(3)}' if m and key in digests else line)
 Path(out).write_text('\n'.join(lines) + '\n')
 PY
-    maps+=(-map "$WORK/md5sum.txt" /md5sum.txt)
-  fi
+    maps+=(-map "$WORK/$sums" "/$sums")
+  done
 
   local label='' stamp; stamp=$(date -u +%Y%m%d)
   grep -q '^FAIL' "$AUDIT/summary" && label='-TEST-UNVERIFIED'

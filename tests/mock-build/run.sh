@@ -8,6 +8,7 @@ HERE=$(cd -- "$(dirname -- "$0")" && pwd)
 REPO=$(cd -- "$HERE/../.." && pwd)
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
+export MOCK_GRUB="$REPO/tests/fixtures/openkylin-3.0-grub.cfg"
 export PATH="$HERE/stubs:$PATH" KIRIN_MIN_FREE_GB=1 MOCK_STATE="$T/state" KIRIN_TEST_WRAP=65536
 mkdir -p "$MOCK_STATE"
 
@@ -89,6 +90,10 @@ iso=$(ls "$T"/out/kirin-*-amd64.iso)
 case "$iso" in *TEST-UNVERIFIED*) fail 'clean build labelled as test' ;; esac
 grep -q 'map .*filesystem.squashfs /casper/filesystem.squashfs' "$iso" || fail 'squashfs not mapped into ISO'
 grep -q 'boot_image any replay' "$iso" || fail 'boot records not replayed'
+grep -q 'map .*iso-boot/boot/grub/grub.cfg /boot/grub/grub.cfg' "$iso" || fail 'boot menu not mapped'
+grep -q 'grub-background.png /boot/grub/kirin-background.png' "$iso" || fail 'GRUB background not mapped'
+grep -q 'isolinux-splash.png /isolinux/splash.png' "$iso" || fail 'isolinux splash not mapped'
+grep -q 'map .*SHA256SUMS /SHA256SUMS' "$iso" || fail 'SHA256SUMS not mapped'
 python3 - "$T/out" "$T/work" <<'PY' || fail 'output checks'
 import glob, hashlib, json, sys
 out, work = sys.argv[1:]
@@ -96,7 +101,12 @@ rec = json.load(open(glob.glob(out + '/*.build.json')[0]))
 assert all(v == 'PASS' for v in rec['audits'].values()), rec['audits']
 md5 = dict(reversed(l.split('  ', 1)) for l in open(work + '/md5sum.txt').read().splitlines())
 assert md5['./casper/filesystem.squashfs'] == hashlib.md5(open(work + '/filesystem.squashfs', 'rb').read()).hexdigest()
-assert md5['./boot/grub/grub.cfg'] == 'aaaa'
+new_grub = open(work + '/iso-boot/boot/grub/grub.cfg', 'rb').read()
+assert b'locale=en_GB.UTF-8' in new_grub and b'Install Kirin Linux' in new_grub
+assert md5['./boot/grub/grub.cfg'] == hashlib.md5(new_grub).hexdigest(), 'grub.cfg md5 not updated'
+assert md5['./md5sum.txt'] == 'cccc'
+sha = dict(reversed(l.split('  ', 1)) for l in open(work + '/SHA256SUMS').read().splitlines())
+assert sha['./boot/grub/grub.cfg'] == hashlib.sha256(new_grub).hexdigest(), 'SHA256SUMS not updated'
 PY
 R="$T/work/rootfs"
 [ ! -e "$R/kirin-build" ] && [ ! -e "$R/usr/sbin/policy-rc.d" ] || fail 'build scaffolding left in image'
@@ -120,6 +130,7 @@ grep -q 'NAME="Kirin Linux"' "$R/usr/lib/os-release" || fail 'os-release not reb
 [ -f "$R/etc/xdg/fastfetch/config.jsonc" ] && [ -f "$R/usr/share/plymouth/themes/kirin/splash.png" ] || fail 'branding files missing'
 [ -f "$R/etc/skel/.var/app/com.jeffser.Alpaca/data/alpaca.db" ] || fail 'Alpaca not pre-connected'
 grep -q 'ENABLED debian' "$T/work/audit/extra-repos.log" || fail 'extra repos step not run'
+grep -q 'installed fastfetch' "$T/work/audit/extra-packages.log" || fail 'extra packages step not run'
 grep -q 'keeping openKylin.s live initrd' "$T/log3" || fail 'live initrd decision not reported'
 
 echo '--- 5. a policy failure blocks release but allows a labelled test build'

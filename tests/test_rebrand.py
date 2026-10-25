@@ -75,6 +75,18 @@ class TestRebrand(unittest.TestCase):
         (self.root / 'usr/lib/os-release').unlink()
         self.assertEqual(quiet(rebrand.main, ['--root', str(self.root), '--apply']), 2)
 
+    def test_explicit_names_with_russian(self):
+        apps = self.root / 'usr/share/applications'
+        (apps / 'kylin-os-installer.desktop').write_text(
+            '[Desktop Entry]\nName=Install openKylin\nExec=kylin-os-installer\n\n[Desktop Action x]\nName=Other\n', encoding='utf-8')
+        quiet(rebrand.main, ['--root', str(self.root), '--apply'])
+        text = (apps / 'kylin-os-installer.desktop').read_text(encoding='utf-8')
+        self.assertIn('Name=Install Kirin Linux\n', text)
+        self.assertIn('Name[ru]=Установить Kirin Linux\n', text)
+        self.assertIn('Name=Other\n', text)                 # only the main entry is renamed
+        self.assertEqual(text.count('Name[ru]='), 1)
+        self.assertEqual(quiet(rebrand.main, ['--root', str(self.root), '--audit']), 0)
+
     def test_word_boundaries(self):
         self.assertEqual(rebrand.rebrand_desktop('Name=Kylinware and openKylin\n'), 'Name=Kylinware and Kirin\n')
 

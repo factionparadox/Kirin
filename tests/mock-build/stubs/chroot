@@ -34,6 +34,9 @@ elif step == 'finish':
 elif step == 'extra-repos':
     assert (root / 'kirin-build/extra-repos/kirin-debian.gpg').is_file(), 'Debian keyring not staged'
     print('ENABLED debian (pinned below openKylin)')
+elif step == 'install-extras':
+    assert (root / 'kirin-build/extra-packages.txt').is_file(), 'extra package list not staged'
+    print('installed fastfetch from 2.0 http://archive.ubuntu.com/ubuntu')
 elif step == 'manifest':
     print('\n'.join(f'{p}\t1' for p in pkgs))
 else:
