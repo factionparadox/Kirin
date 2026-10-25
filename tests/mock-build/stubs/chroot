@@ -31,6 +31,9 @@ elif step == 'flatpak':
         e.parent.mkdir(parents=True, exist_ok=True); e.write_text('[Desktop Entry]\nName=App\n')
 elif step == 'finish':
     assert (root / 'usr/share/ollama/.ollama/models/blobs').is_dir()
+elif step == 'extra-repos':
+    assert (root / 'kirin-build/extra-repos/kirin-debian.gpg').is_file(), 'Debian keyring not staged'
+    print('ENABLED debian (pinned below openKylin)')
 elif step == 'manifest':
     print('\n'.join(f'{p}\t1' for p in pkgs))
 else:

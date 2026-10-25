@@ -1,0 +1,14 @@
+# Ubuntu 26.04 LTS "resolute", for packages openKylin does not provide.
+# openKylin 3.0 is built from Ubuntu's toolchain, so these are the most compatible extras.
+# Pinned below openKylin (see 80kirin-extra-repos): it never replaces openKylin packages.
+Types: deb
+URIs: http://archive.ubuntu.com/ubuntu
+Suites: resolute resolute-updates
+Components: main universe
+Signed-By: /etc/apt/keyrings/kirin-ubuntu.gpg
+
+Types: deb
+URIs: http://security.ubuntu.com/ubuntu
+Suites: resolute-security
+Components: main universe
+Signed-By: /etc/apt/keyrings/kirin-ubuntu.gpg

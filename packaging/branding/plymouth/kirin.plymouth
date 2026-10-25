@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Kirin
+Description=Kirin Linux boot splash
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/kirin
+ScriptFile=/usr/share/plymouth/themes/kirin/kirin.script

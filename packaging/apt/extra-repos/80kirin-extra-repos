@@ -1,0 +1,28 @@
+# Kirin extra repositories: openKylin (default priority 500) always wins.
+# At 100-110 these supply only packages openKylin lacks, and keep those updated;
+# they never replace or upgrade an openKylin package. Ubuntu is preferred over
+# Debian when both have a package openKylin lacks.
+# To install a specific version from them anyway:  apt install -t trixie PACKAGE
+Package: *
+Pin: release o=Ubuntu,n=resolute
+Pin-Priority: 110
+
+Package: *
+Pin: release o=Ubuntu,n=resolute-updates
+Pin-Priority: 110
+
+Package: *
+Pin: release o=Ubuntu,n=resolute-security
+Pin-Priority: 110
+
+Package: *
+Pin: release o=Debian,n=trixie
+Pin-Priority: 100
+
+Package: *
+Pin: release o=Debian,n=trixie-updates
+Pin-Priority: 100
+
+Package: *
+Pin: release o=Debian,n=trixie-security
+Pin-Priority: 100

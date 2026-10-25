@@ -4,3 +4,5 @@ io.github.flattool.Warehouse
 com.github.tchx84.Flatseal
 # Offline reader for the bundled Wiktionary (Russian learning; docs/RUSSIAN.md).
 org.kiwix.desktop
+# Desktop chat app for Kirin's Ollama models (pre-connected by scripts/build/seed-alpaca.py).
+com.jeffser.Alpaca

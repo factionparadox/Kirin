@@ -18,10 +18,11 @@ Inspired by [Archon/Cognoscenti](https://github.com/factionparadox/Archon), Kiri
 | Desktop | UKUI 4.24 |
 | Filesystem | OpenZFS root, independent persistent user datasets |
 | Boot and recovery | ZFSBootMenu, snapshots, cloned boot environments, graphical ZFS administration |
-| Native software | APT/dpkg, planned MX Package Installer port and Synaptic |
+| Native software | APT/dpkg, planned MX Package Installer port and Synaptic; pinned Ubuntu 26.04 and Debian 13 repositories for packages openKylin lacks |
 | Flatpak software | Flatpak and Flathub, **Warehouse** and **Flatseal** preinstalled |
 | Replaced | openKylin Software Store (not the OS updater or APT/dpkg) |
-| AI | Preserve every existing upstream model; add offline Ollama + Qwen2.5-Coder 7B Instruct |
+| AI | Preserve every existing upstream model; add offline Ollama + Qwen2.5-Coder 7B Instruct, with the Alpaca desktop chat app |
+| Branding | Kirin boot splash, menu names, OS name, Fastfetch logo and icons ([Branding](docs/BRANDING.md)) |
 | Web apps | Planned Web App Studio for ChatGPT, Claude and arbitrary websites |
 | Learning | Kirin Learn, offline lessons, Vim, Neovim and native tutors |
 | Russian study | Local AI tutor (Qwen3 30B), Piper Russian voices, public-domain DLI/FSI/Peace Corps courses, offline Wiktionary ([Russian learning kit](docs/RUSSIAN.md)) |

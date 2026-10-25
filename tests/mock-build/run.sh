@@ -58,6 +58,9 @@ printf 'textbook' > "$SITE/book.pdf"
 printf 'DLI Russian Basic Course/Mod 01.pdf\tfile://%s/book.pdf\nDLI Russian Basic Course/Gone.pdf\tfile://%s/missing.pdf\n' \
   "$SITE" "$SITE" > "$T/library.tsv"
 printf 'dictionary' > "$SITE/$ZIM"; printf '%s  %s\n' "$(sha256sum "$SITE/$ZIM" | cut -d' ' -f1)" "$ZIM" > "$SITE/$ZIM.sha256"
+FIX="$REPO/tests/fixtures"
+KIRIN_TEST_DEBIAN_KEYS="file://$FIX/test-key-rsa.asc=$(head -1 "$FIX/test-key-fingerprints.txt")"
+export KIRIN_TEST_DEBIAN_KEYS
 export KIRIN_TEST_VOICES_TSV="$T/voices.tsv" KIRIN_TEST_LIBRARY_TSV="$T/library.tsv" KIRIN_TEST_KIWIX_INDEX="file://$SITE/"
 export KIRIN_TEST_FYAML_SHA256; KIRIN_TEST_FYAML_SHA256=$(sha256sum "$P/libfyaml-0.9.6.tar.gz" | cut -d' ' -f1)
 
@@ -111,6 +114,13 @@ RU="$R/opt/kirin/russian"
 python3 -c 'import json,sys; c=json.load(open(sys.argv[1])); assert c["model"].startswith("qwen3:30b"), c' \
   "$R/usr/share/kirin/russian.json" || fail 'russian.json wrong'
 grep -q 'PASS russian' "$T/work/audit/summary" || fail 'russian audit did not pass'
+grep -q 'PASS branding' "$T/work/audit/summary" || fail 'branding audit did not pass'
+grep -q '^Name=Kirin Music$' "$R/usr/share/applications/kylin-music.desktop" || fail 'menu name not rebranded'
+grep -q 'NAME="Kirin Linux"' "$R/usr/lib/os-release" || fail 'os-release not rebranded'
+[ -f "$R/etc/xdg/fastfetch/config.jsonc" ] && [ -f "$R/usr/share/plymouth/themes/kirin/splash.png" ] || fail 'branding files missing'
+[ -f "$R/etc/skel/.var/app/com.jeffser.Alpaca/data/alpaca.db" ] || fail 'Alpaca not pre-connected'
+grep -q 'ENABLED debian' "$T/work/audit/extra-repos.log" || fail 'extra repos step not run'
+grep -q 'keeping openKylin.s live initrd' "$T/log3" || fail 'live initrd decision not reported'
 
 echo '--- 5. a policy failure blocks release but allows a labelled test build'
 printf 'Name[zh_CN]=Files-zh\n' >> "$R/usr/share/applications/files.desktop"

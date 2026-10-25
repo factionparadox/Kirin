@@ -21,6 +21,7 @@ inventory = load('inventory-models')
 qwen = load('qwen-index')
 removal = load('check-removal')
 recovery = load('recover-squashfs')
+alpaca = load('seed-alpaca')
 
 
 def quiet(fn, *args):
@@ -217,6 +218,26 @@ class TestRecovery(TempRoot):
         extracted.write_bytes(b'x' * 8192)
         with self.assertRaises(ValueError):
             recovery.recover(iso, extracted, self.WRAP)
+
+
+class TestAlpacaSeed(TempRoot):
+    def test_creates_external_instance_for_new_users(self):
+        import sqlite3
+        path = alpaca.seed(self.root, 'qwen3:30b-a3b-instruct-2507-q4_K_M')
+        self.assertEqual(path, self.root / 'etc/skel/.var/app/com.jeffser.Alpaca/data/alpaca.db')
+        rows = sqlite3.connect(path).execute('SELECT pinned, type, properties FROM instance').fetchall()
+        self.assertEqual(len(rows), 1)
+        pinned, kind, props = rows[0]
+        props = json.loads(props)
+        self.assertEqual((pinned, kind), (1, 'ollama'))
+        self.assertEqual(props['url'], 'http://127.0.0.1:11434')
+        self.assertTrue(props['default_model'].startswith('qwen3'))
+        alpaca.seed(self.root, 'other')                      # re-running replaces, not duplicates
+        self.assertEqual(sqlite3.connect(path).execute('SELECT COUNT(*) FROM instance').fetchone()[0], 1)
+
+    def test_refuses_live_root(self):
+        with self.assertRaises(ValueError):
+            alpaca.seed(Path('/'), 'x')
 
 
 if __name__ == '__main__':

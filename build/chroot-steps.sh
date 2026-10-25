@@ -129,6 +129,45 @@ case "$step" in
       flatpak override --system --filesystem="$1:ro" org.kiwix.desktop
     fi
     ;;
+  extra-repos)
+    # Pinned Debian 13 / Ubuntu 26.04 repositories. Each is kept only if APT can
+    # verify it, and both are removed if they would replace any openKylin package.
+    d=/kirin-build/extra-repos
+    install -d -m 0755 /etc/apt/keyrings
+    install -m 0644 "$d/80kirin-extra-repos" /etc/apt/preferences.d/80kirin-extra-repos
+    have_list() { ls /var/lib/apt/lists/*"$1"*InRelease >/dev/null 2>&1; }
+    drop() { rm -f "/etc/apt/sources.list.d/kirin-$1.sources" "/etc/apt/keyrings/kirin-$1.gpg"; echo "DROPPED $1: $2"; }
+    if [ -f "$d/kirin-debian.gpg" ]; then
+      install -m 0644 "$d/kirin-debian.gpg" /etc/apt/keyrings/kirin-debian.gpg
+      install -m 0644 "$d/kirin-debian.sources" /etc/apt/sources.list.d/kirin-debian.sources
+      apt-get update -q >/dev/null 2>&1 || true
+      have_list 'deb.debian.org_debian_dists_trixie_' || drop debian 'APT could not verify the Debian repository'
+    else
+      echo 'DROPPED debian: no verified Debian keys'
+    fi
+    # Ubuntu's keyring comes from a repository APT already trusts (openKylin's or Debian's).
+    rm -rf "$d/ubuntu-keyring"; mkdir -p "$d/ubuntu-keyring"
+    if (cd "$d/ubuntu-keyring" && apt-get download -q ubuntu-keyring >/dev/null 2>&1) &&
+       dpkg-deb -x "$d"/ubuntu-keyring/ubuntu-keyring_*.deb "$d/ubuntu-keyring/root" &&
+       [ -f "$d/ubuntu-keyring/root/usr/share/keyrings/ubuntu-archive-keyring.gpg" ]; then
+      install -m 0644 "$d/ubuntu-keyring/root/usr/share/keyrings/ubuntu-archive-keyring.gpg" /etc/apt/keyrings/kirin-ubuntu.gpg
+      install -m 0644 "$d/kirin-ubuntu.sources" /etc/apt/sources.list.d/kirin-ubuntu.sources
+      apt-get update -q >/dev/null 2>&1 || true
+      have_list 'archive.ubuntu.com_ubuntu_dists_resolute_' ||
+        drop ubuntu "APT could not verify Ubuntu 26.04 with the keyring from $(apt-cache policy ubuntu-keyring | awk '/\*\*\*/{getline; print $2; exit}')"
+    else
+      echo 'DROPPED ubuntu: no trusted ubuntu-keyring package available'
+    fi
+    # Safety: the extras must never upgrade or replace an openKylin package.
+    if apt-get -s -q dist-upgrade 2>/dev/null | grep -E '^Inst .*\((\S+ )?(Debian|Ubuntu)[: ]'; then
+      drop debian 'it would replace openKylin packages'; drop ubuntu 'it would replace openKylin packages'
+      apt-get update -q >/dev/null 2>&1 || true
+    fi
+    for r in debian ubuntu; do
+      [ -f "/etc/apt/sources.list.d/kirin-$r.sources" ] && echo "ENABLED $r (pinned below openKylin)"
+    done
+    [ -n "$(ls /etc/apt/sources.list.d/kirin-*.sources 2>/dev/null)" ] || rm -f /etc/apt/preferences.d/80kirin-extra-repos
+    ;;
   finish)
     # openKylin's locales package is Ubuntu-style: locale-gen reads
     # /var/lib/locales/supported.d, not /etc/locale.gen. Generate only en_GB and ru_RU.
@@ -150,6 +189,25 @@ case "$step" in
     done
     chown -R ollama:ollama /usr/share/ollama
     systemctl enable ollama.service
+    # Kirin boot splash: select the theme, then rebuild every initramfs.
+    if [ -f /usr/share/plymouth/themes/kirin/kirin.plymouth ]; then
+      if command -v update-alternatives >/dev/null; then
+        update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth \
+          /usr/share/plymouth/themes/kirin/kirin.plymouth 300 >/dev/null 2>&1 || true
+        update-alternatives --set default.plymouth /usr/share/plymouth/themes/kirin/kirin.plymouth >/dev/null 2>&1 || true
+      fi
+      if command -v plymouth-set-default-theme >/dev/null; then plymouth-set-default-theme kirin || true; fi
+    fi
+    if command -v update-initramfs >/dev/null; then
+      update-initramfs -u -k all
+      for k in /boot/vmlinuz-*; do
+        [ -e "$k" ] || continue
+        v=${k#/boot/vmlinuz-}
+        if [ -f "/boot/initrd.img-$v" ] && lsinitramfs "/boot/initrd.img-$v" 2>/dev/null | grep -q 'scripts/casper$'; then
+          echo "CASPER_INITRD $v"
+        fi
+      done
+    fi
     apt-get clean
     rm -rf /var/lib/apt/lists/* /var/cache/apt/*.bin
     ;;

@@ -22,6 +22,8 @@ PIPER_SHA256=${KIRIN_TEST_PIPER_SHA256:-a50cb45f355b7af1f6d758c1b360717877ba0a39
 KIWIX_INDEX=${KIRIN_TEST_KIWIX_INDEX:-https://download.kiwix.org/zim/wiktionary/}
 KIWIX_PREFIX='wiktionary_en_all_nopic_'
 RUSSIAN_DIR=/opt/kirin/russian
+# Debian 13 archive and security signing keys (https://ftp-master.debian.org/keys.html).
+DEBIAN_KEYS=${KIRIN_TEST_DEBIAN_KEYS:-"https://ftp-master.debian.org/keys/archive-key-13.asc=04B54C3CDCA79751B16BC6B5225629DF75B188BD https://ftp-master.debian.org/keys/archive-key-13-security.asc=5E04A1E3223A19A20706E20F9904613D4CCE68C6"}
 VOICES_TSV=${KIRIN_TEST_VOICES_TSV:-$REPO/packaging/russian/voices.tsv}
 LIBRARY_TSV=${KIRIN_TEST_LIBRARY_TSV:-$REPO/packaging/russian/library.tsv}
 OLLAMA_VERSION_DEFAULT='v0.40.11'
@@ -31,7 +33,7 @@ FYAML_SHA256=${KIRIN_TEST_FYAML_SHA256:-a59cc3331e2eb903ec36933ad52a45888041cac3
 MIN_FREE_GB=${KIRIN_MIN_FREE_GB:-70}
 
 ISO='' ISO_SHA256='' WORK="$PWD/work" OUT="$PWD/out" SQUASHFS_REL=''
-MODEL_INVENTORY='' ACCEPT_INVENTORY=0 TEST_BUILD=0 FROM='' ONLY='' NO_RUSSIAN=0 KIWIX_NAME=''
+MODEL_INVENTORY='' ACCEPT_INVENTORY=0 TEST_BUILD=0 FROM='' ONLY='' NO_RUSSIAN=0 KIWIX_NAME='' NO_EXTRA_REPOS=0
 OLLAMA_VERSION=$OLLAMA_VERSION_DEFAULT
 ALLOW_REMOVAL=()
 
@@ -56,6 +58,7 @@ Options:
   --squashfs PATH         Root filesystem squashfs inside the ISO, if detection is ambiguous
   --ollama-version TAG    Ollama release tag (default: $OLLAMA_VERSION_DEFAULT)
   --no-russian            Leave out the Russian tutor model, voices, course library and dictionary
+  --no-extra-repos        Do not add the pinned Ubuntu 26.04 and Debian 13 repositories
   --kiwix-name FILE       Pin the Wiktionary ZIM (e.g. ${KIWIX_PREFIX}2026-09.zim) instead of the newest
   --test-build            Produce an ISO even if policy audits fail; named TEST-UNVERIFIED.
                           The AI-model contract is never relaxed.
@@ -78,6 +81,7 @@ while [ $# -gt 0 ]; do
     --ollama-version) OLLAMA_VERSION=$2; shift 2 ;;
     --test-build) TEST_BUILD=1; shift ;;
     --no-russian) NO_RUSSIAN=1; shift ;;
+    --no-extra-repos) NO_EXTRA_REPOS=1; shift ;;
     --kiwix-name) KIWIX_NAME=$2; shift 2 ;;
     --from) FROM=$2; shift 2 ;;
     --only) ONLY=$2; shift 2 ;;
@@ -139,6 +143,9 @@ mount_chroot() {
   install -m 0644 "$REPO/packaging/base-packages.txt" "$REPO/packaging/flatpak-apps.txt" "$ROOTFS/kirin-build/"
   [ ! -f "$PAYLOADS/libfyaml-$FYAML_VERSION.tar.gz" ] ||
     install -m 0644 "$PAYLOADS/libfyaml-$FYAML_VERSION.tar.gz" "$ROOTFS/kirin-build/"
+  mkdir -p "$ROOTFS/kirin-build/extra-repos"
+  cp "$REPO"/packaging/apt/extra-repos/* "$ROOTFS/kirin-build/extra-repos/"
+  [ ! -f "$PAYLOADS/kirin-debian.gpg" ] || cp "$PAYLOADS/kirin-debian.gpg" "$ROOTFS/kirin-build/extra-repos/"
   touch "$ROOTFS/kirin-build/IN_CHROOT"
 }
 
@@ -390,11 +397,27 @@ fetch_libfyaml() {
   info "libfyaml $FYAML_VERSION source verified"
 }
 
+fetch_debian_keys() {
+  [ "$NO_EXTRA_REPOS" -eq 0 ] || return 0
+  local out="$PAYLOADS/kirin-debian.gpg" tmp="$PAYLOADS/debian-keys" pair url fpr n=0
+  rm -rf "$tmp"; mkdir -p "$tmp"
+  for pair in $DEBIAN_KEYS; do
+    url=${pair%=*} fpr=${pair##*=} n=$((n + 1))
+    curl -fsSL "$url" -o "$tmp/$n.asc" || die "could not download Debian key $url"
+    python3 "$REPO/scripts/build/pgp-fingerprint.py" "$tmp/$n.asc" --expect "$fpr" --binary-out "$tmp/$n.gpg" |
+      sed 's/^/    /' || die "Debian key $url does not have the pinned fingerprint $fpr"
+  done
+  cat "$tmp"/*.gpg > "$out"
+  rm -rf "$tmp"
+  info 'Debian 13 signing keys verified against pinned fingerprints'
+}
+
 stage_payloads() {
   log 'Fetching payloads: Ollama, the AI models, Russian learning material and compatibility sources'
   fetch_ollama
   pull_qwen
   fetch_libfyaml
+  fetch_debian_keys
   fetch_russian
 }
 
@@ -474,6 +497,7 @@ stage_customise() {
   # Payloads added after a first run (e.g. the libfyaml source) are fetched here.
   [ -f "$PAYLOADS/libfyaml-$FYAML_VERSION.tar.gz" ] || fetch_libfyaml
   [ "$NO_RUSSIAN" -eq 1 ] || [ -f "$PAYLOADS/russian/dictionary.name" ] || fetch_russian
+  [ "$NO_EXTRA_REPOS" -eq 1 ] || [ -f "$PAYLOADS/kirin-debian.gpg" ] || fetch_debian_keys
   local olroot="$PAYLOADS/ollama-$OLLAMA_VERSION/root"
 
   # Language policy first, so dpkg path-exclusions apply to packages installed next.
@@ -483,8 +507,15 @@ stage_customise() {
 
   mount_chroot
   info 'installing base packages'; in_chroot install
-  info 'removing Token Centre and Software Store'; purge_reviewed
-  info 'installing Warehouse, Flatseal and Kiwix system-wide'; in_chroot flatpak "$RUSSIAN_DIR"
+  info 'removing Token Centre, Software Store and Kylin ID'; purge_reviewed
+  if [ "$NO_EXTRA_REPOS" -eq 0 ]; then
+    info 'adding pinned Ubuntu 26.04 and Debian 13 repositories'
+    in_chroot extra-repos | tee "$AUDIT/extra-repos.log" | sed 's/^/    /'
+  fi
+  info 'installing Warehouse, Flatseal, Kiwix and Alpaca system-wide'; in_chroot flatpak "$RUSSIAN_DIR"
+  local chat_model=$QWEN_TAG
+  [ "$NO_RUSSIAN" -eq 1 ] || chat_model=$TUTOR_TAG
+  python3 "$REPO/scripts/build/seed-alpaca.py" --root "$ROOTFS" --model "$chat_model" | sed 's/^/    /'
 
   info 'installing Ollama and the coding model'
   install -d -m 0755 "$ROOTFS/usr/local/bin" "$ROOTFS/usr/local/lib"
@@ -503,13 +534,18 @@ stage_customise() {
   info 'installing Kirin Learn'
   DESTDIR="$ROOTFS" sh "$REPO/scripts/install-education.sh"
 
-  in_chroot finish
+  info 'applying Kirin branding'
+  python3 "$REPO/scripts/kirin-rebrand.py" --root "$ROOTFS" --apply | sed 's/^/    /'
+
+  in_chroot finish | tee "$AUDIT/finish.log"
   in_chroot manifest > "$WORK/filesystem.manifest"
   restore_chroot
 
-  # Packages installed above can bring back translated menu keys.
+  # Packages installed above can bring back translated menu keys and Kylin names.
   python3 "$REPO/scripts/kirin-localise.py" --root "$ROOTFS" --apply ||
     info 'language tool reported problems; the audit stage will show them'
+  python3 "$REPO/scripts/kirin-rebrand.py" --root "$ROOTFS" --apply >/dev/null
+  prepare_live_initrd
   info 'customisation complete'
 }
 
@@ -533,6 +569,7 @@ stage_audit() {
   run_audit language python3 "$REPO/scripts/kirin-localise.py" --root "$ROOTFS" --audit
   run_audit accounts python3 "$REPO/scripts/audit-online-accounts.py" --root "$ROOTFS"
   run_audit russian audit_russian
+  run_audit branding python3 "$REPO/scripts/kirin-rebrand.py" --root "$ROOTFS" --audit
   grep -q '^FAIL ai-payload' "$summary" && die 'AI payload contract failed; this is never waived'
   if [ "$failed" -eq 1 ] && [ "$TEST_BUILD" -ne 1 ]; then
     die 'policy audits failed; fix them, or pass --test-build for an unverified test image'
@@ -562,9 +599,15 @@ stage_pack() {
   if [ -f "$ISOTREE/$stem.manifest" ]; then
     maps+=(-map "$WORK/filesystem.manifest" "/$stem.manifest")
   fi
+  local -a md5pairs=("$sq=/$SQUASHFS_REL" "$WORK/filesystem.size=/$stem.size" "$WORK/filesystem.manifest=/$stem.manifest")
+  if [ -f "$WORK/live-initrd" ] && [ -s "$WORK/live-initrd.path" ]; then
+    local initrd_rel; initrd_rel=$(cat "$WORK/live-initrd.path")
+    maps+=(-map "$WORK/live-initrd" "/$initrd_rel")
+    md5pairs+=("$WORK/live-initrd=/$initrd_rel")
+    info "live session gets the Kirin boot splash ($initrd_rel)"
+  fi
   if [ -f "$ISOTREE/md5sum.txt" ]; then
-    python3 - "$ISOTREE/md5sum.txt" "$WORK/md5sum.txt" "$sq=/$SQUASHFS_REL" \
-        "$WORK/filesystem.size=/$stem.size" "$WORK/filesystem.manifest=/$stem.manifest" <<'PY'
+    python3 - "$ISOTREE/md5sum.txt" "$WORK/md5sum.txt" "${md5pairs[@]}" <<'PY'
 import hashlib, sys
 from pathlib import Path
 src, out, *pairs = sys.argv[1:]
@@ -611,6 +654,30 @@ json.dump(record, open(out, 'w'), indent=2)
 PY
   log "Built $iso_out"
   info "$(cut -d' ' -f1 "$iso_out.sha256")"
+}
+
+# The live session boots from the ISO's own initrd, not the image's. If the
+# rebuilt initramfs (with the Kirin splash) is for the same kernel the ISO
+# boots and contains casper's live-boot scripts, use it for the ISO too.
+prepare_live_initrd() {
+  rm -f "$WORK/live-initrd" "$WORK/live-initrd.path"
+  local -a ok vmlinuz initrds
+  mapfile -t ok < <(sed -n 's/^CASPER_INITRD //p' "$AUDIT/finish.log")
+  mapfile -t vmlinuz < <(find "$ISOTREE/casper" -maxdepth 1 -type f -name 'vmlinuz*' 2>/dev/null)
+  mapfile -t initrds < <(find "$ISOTREE/casper" -maxdepth 1 -type f -name 'initrd*' 2>/dev/null)
+  if [ ${#vmlinuz[@]} -ne 1 ] || [ ${#initrds[@]} -ne 1 ]; then
+    info "keeping openKylin's live initrd: expected one casper/vmlinuz and one casper/initrd"; return 0
+  fi
+  local v
+  for v in "${ok[@]}"; do
+    if cmp -s "${vmlinuz[0]}" "$ROOTFS/boot/vmlinuz-$v"; then
+      cp "$ROOTFS/boot/initrd.img-$v" "$WORK/live-initrd"
+      printf '%s\n' "${initrds[0]#"$ISOTREE"/}" > "$WORK/live-initrd.path"
+      info "rebuilt live initrd for kernel $v"
+      return 0
+    fi
+  done
+  info "keeping openKylin's live initrd: no rebuilt live-capable initramfs matches the ISO kernel"
 }
 
 # ---------------------------------------------------------------- driver
