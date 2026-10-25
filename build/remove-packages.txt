@@ -1,0 +1,12 @@
+# Packages Kirin purges from the openKylin 3.0 image, if installed.
+# Only names actually present in the image are requested. The purge is
+# simulated first and refused if APT would remove anything else
+# (see scripts/build/check-removal.py and docs/BUILDING.md).
+
+# Accounts: verified Huanghe source package (docs/ACCOUNTS.md)
+openkylin-token-center
+
+# Software Store: candidate names from scripts/audit-software-image.py
+kylin-software-center
+ubuntu-kylin-software-center
+openkylin-software-center

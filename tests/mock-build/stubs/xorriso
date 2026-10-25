@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+"""Stub xorriso for tests/mock-build: fakes an openKylin-like ISO layout."""
+import os, sys
+from pathlib import Path
+args = sys.argv[1:]
+if '-pvd_info' in args:
+    print('Volume Id    : openKylin-3.0-x86_64'); sys.exit(0)
+if '-extract' in args:
+    d = Path(args[args.index('-extract') + 2])
+    (d / 'casper').mkdir(parents=True); (d / 'boot/grub').mkdir(parents=True)
+    (d / 'casper/filesystem.squashfs').write_bytes(b'S' * 100_000)
+    (d / 'casper/tiny.squashfs').write_bytes(b's' * 1000)
+    (d / 'casper/filesystem.size').write_text('1\n')
+    (d / 'casper/filesystem.manifest').write_text('old\t1\n')
+    (d / 'boot/grub/grub.cfg').write_text('menuentry\n')
+    (d / 'md5sum.txt').write_text('ffff  ./casper/filesystem.squashfs\naaaa  ./boot/grub/grub.cfg\n')
+    for p in d.rglob('*'): os.chmod(p, 0o555 if p.is_dir() else 0o444)
+    sys.exit(0)
+if '-outdev' in args:
+    out = Path(args[args.index('-outdev') + 1])
+    assert not out.exists(), 'outdev must not pre-exist'
+    for i, a in enumerate(args):
+        if a == '-map': assert Path(args[i + 1]).is_file(), f'missing mapped file {args[i + 1]}'
+    out.write_text(' '.join(a.lstrip('-') for a in args) + '\n'); sys.exit(0)
+sys.exit(f'xorriso stub: unhandled {args}')

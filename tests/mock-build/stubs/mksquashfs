@@ -1,0 +1,6 @@
+#!/bin/sh
+# Stub mksquashfs: records what would be packed.
+set -eu
+[ -d "$1" ] || { echo "no source $1" >&2; exit 1; }
+[ ! -e "$1/kirin-build" ] || { echo 'build scaffolding would be packed' >&2; exit 1; }
+printf 'squashfs of %s\n' "$*" > "$2"

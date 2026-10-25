@@ -1,0 +1,19 @@
+#!/usr/bin/env python3
+"""Stub unsquashfs: -s prints superblock info, -d unpacks a fake openKylin root."""
+import os, sys
+from pathlib import Path
+a = sys.argv[1:]
+if a[0] == '-s':
+    print('Found a valid SQUASHFS 4:0 superblock\nCompression xz\nBlock size 131072'); sys.exit(0)
+if a[0] == '-d':
+    r = Path(a[1]); assert not r.exists(); assert a[2].endswith('filesystem.squashfs'), a[2]
+    for d in ('var/lib/dpkg/info', 'opt/kylin-ai', 'etc', 'usr/sbin', 'usr/share/applications', 'run/systemd/resolve'):
+        (r / d).mkdir(parents=True, exist_ok=True)
+    pk = ['apt', 'dpkg', 'kylin-ai', 'openkylin-token-center', 'openkylin-desktop-meta']
+    (r / 'var/lib/dpkg/status').write_text(''.join(f'Package: {p}\nStatus: install ok installed\nVersion: 1\n\n' for p in pk))
+    (r / 'var/lib/dpkg/info/kylin-ai.list').write_text('/opt/kylin-ai/asr.onnx\n')
+    (r / 'opt/kylin-ai/asr.onnx').write_bytes(os.urandom(8192))
+    (r / 'usr/share/applications/files.desktop').write_text('[Desktop Entry]\nName=Files\n')
+    os.symlink('../run/systemd/resolve/stub-resolv.conf', r / 'etc/resolv.conf')
+    sys.exit(0)
+sys.exit(f'unsquashfs stub: unhandled {a}')

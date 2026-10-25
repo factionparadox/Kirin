@@ -85,14 +85,24 @@ Systemd stays, but Kirin's downstream build must remove the optional birthDate u
 | Offline AI-file integrity checking | Real model payloads embedded and functioning |
 | Language policy and vendor-account audits | Translated, account-free openKylin image |
 | Store-removal and Flatpak integration specification; image-inventory audit | Actual store removal, Warehouse/Flatseal offline integration and runtime tests |
+| ISO remaster pipeline (`build/kirin-build.sh`), tested against a mock image | A real build from the openKylin 3.0 ISO and VM boot testing |
 | Design and package manifests | OpenZFS-root ISO, boot environments, ZFS GUI, Web App Studio and MX GUI APT port |
 
 **No finished ISO, verified graphical package manager, or ZFS-root boot is claimed.** A release requires a genuine openKylin build root, offline installation testing and checks on disposable drives or virtual machines.
+
+## Building the ISO
+
+`build/kirin-build.sh` remasters the official openKylin 3.0 ISO into a Kirin image. It needs an x86-64 Linux host (WSL2 works) with root, internet access and about 70 GB free, and it stops for a human review of the upstream AI model inventory before changing anything. See [Building the ISO](docs/BUILDING.md).
+
+~~~sh
+sudo build/kirin-build.sh --iso openKylin-3.0-x86_64.iso --iso-sha256 <published sha256>
+~~~
 
 ## Source-stage checks
 
 ~~~sh
 python3 -m unittest discover -s tests -v
+sudo bash tests/mock-build/run.sh   # builder end-to-end against stub tools
 DESTDIR="$(mktemp -d)" sh scripts/install-education.sh
 # Once a candidate image has been unpacked into an OFFLINE staging root:
 python3 scripts/audit-software-image.py --root /path/to/staged-root

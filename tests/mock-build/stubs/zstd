@@ -1,0 +1,3 @@
+#!/bin/sh
+echo "zstd stub: not used in mock builds" >&2
+exit 1
