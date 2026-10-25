@@ -1,0 +1,18 @@
+{
+  "package": "framework-tool",
+  "version": "0.6.6-1kirin1",
+  "architecture": "amd64",
+  "section": "utils",
+  "depends": "libc6, libgcc-s1, libstdc++6, libudev1",
+  "homepage": "https://github.com/FrameworkComputer/framework-system",
+  "summary": "Framework Computer's tool for its laptops' firmware and embedded controller",
+  "description": "framework_tool, from Framework Computer: shows firmware versions, battery and charging state, sets the charge limit and keyboard and fingerprint LEDs, and talks to input modules and the embedded controller. Most actions need sudo. Packaged for Kirin from the official v0.6.6 release binary.",
+  "files": [
+    {"url": "https://github.com/FrameworkComputer/framework-system/releases/download/v0.6.6/framework_tool",
+     "sha256": "ebc2f3ca300dac6f484c02d058833372ff8dd3c23f2a74b63c774f8dc2f86171",
+     "dest": "usr/bin/framework_tool", "mode": "0755"},
+    {"url": "https://raw.githubusercontent.com/FrameworkComputer/framework-system/9c0f6cf83ec3b443be0adb1cbf3dea8a9f8f722c/LICENSE.md",
+     "sha256": "59077079599cf038c21c913cdc2f1d80829a5f237736e1182d6e98e6f4a8d627",
+     "dest": "usr/share/doc/framework-tool/copyright", "mode": "0644"}
+  ]
+}
