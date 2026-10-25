@@ -143,7 +143,7 @@ mount_chroot() {
   mkdir -p "$ROOTFS/kirin-build"
   install -m 0755 "$HERE/chroot-steps.sh" "$ROOTFS/kirin-build/chroot-steps.sh"
   install -m 0644 "$REPO/packaging/base-packages.txt" "$REPO/packaging/flatpak-apps.txt" \
-    "$REPO/packaging/extra-packages.txt" "$ROOTFS/kirin-build/"
+    "$REPO/packaging/extra-packages.txt" "$REPO/packaging/prefer-ubuntu.txt" "$ROOTFS/kirin-build/"
   [ ! -f "$PAYLOADS/libfyaml-$FYAML_VERSION.tar.gz" ] ||
     install -m 0644 "$PAYLOADS/libfyaml-$FYAML_VERSION.tar.gz" "$ROOTFS/kirin-build/"
   install -m 0755 "$REPO/scripts/build/build-debs.py" "$ROOTFS/kirin-build/build-debs.py"
@@ -550,6 +550,10 @@ stage_customise() {
   fi
   info 'installing extra packages (LibreOffice, VLC, Fastfetch and others)'
   in_chroot install-extras | tee "$AUDIT/extra-packages.log" | sed 's/^/    /'
+  if [ "$NO_EXTRA_REPOS" -eq 0 ]; then
+    info 'taking newer hardware data (audio profiles, microcode) from Ubuntu 26.04 where it is newer'
+    in_chroot prefer-ubuntu | tee "$AUDIT/prefer-ubuntu.log" | sed 's/^/    /'
+  fi
   info "building and installing Kirin's own packages (ani-cli)"
   in_chroot kirin-debs | tee "$AUDIT/kirin-debs.log" | sed 's/^/    /'
   info 'installing Proton VPN, Pass and Mail (official packages)'

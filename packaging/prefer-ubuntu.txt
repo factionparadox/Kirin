@@ -1,0 +1,8 @@
+# Hardware data packages taken from Ubuntu 26.04 when Ubuntu's upstream version is
+# newer than openKylin's (Framework validates the 13 Pro on Ubuntu 26.04).
+# Each is switched only if nothing else would come from Ubuntu with it.
+alsa-ucm-conf
+alsa-topology-conf
+intel-microcode
+thermald
+wireless-regdb

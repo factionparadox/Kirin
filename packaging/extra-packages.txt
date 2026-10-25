@@ -20,3 +20,22 @@ mpv
 fzf
 yt-dlp
 ffmpeg
+# Framework Laptop 13 Pro / Intel Panther Lake (what Ubuntu 26.04 and NixOS's
+# Framework module give it). openKylin ships none of these.
+# Video decode/encode on the GPU (VA-API, oneVPL), OpenCL, Vulkan
+intel-media-va-driver-non-free|intel-media-va-driver
+libvpl2
+libmfx-gen1.2|libmfx-gen1
+intel-opencl-icd
+mesa-vulkan-drivers
+# CPU microcode, thermals and power modes (Framework's battery guide uses power-profiles-daemon)
+intel-microcode
+thermald
+power-profiles-daemon
+# Thunderbolt/USB4 device authorisation; Wi-Fi 6 GHz regulatory database
+bolt
+wireless-regdb
+# Checking it all works: vainfo, vulkaninfo, intel_gpu_top
+vainfo
+vulkan-tools
+intel-gpu-tools

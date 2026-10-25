@@ -116,12 +116,52 @@ case "$step" in
     # Packages openKylin may lack; each comes from openKylin if it has it, otherwise
     # from the pinned Ubuntu/Debian repositories. A missing one is reported, not fatal.
     apt-get update -q >/dev/null 2>&1 || true
-    for p in $(list /kirin-build/extra-packages.txt); do
+    # "a|b" means: the first of these that installs (for packages that conflict).
+    for choice in $(list /kirin-build/extra-packages.txt); do
+      done_one=''
+      for p in $(printf '%s\n' "$choice" | tr '|' ' '); do
+        # shellcheck disable=SC2086
+        if apt-get install -y -q --no-install-recommends $apt_opts "$p" >/dev/null 2>&1; then
+          echo "installed $p from $(apt-cache policy "$p" | awk '/\*\*\*/{getline; print $2" "$3; exit}')"
+          done_one=1; break
+        fi
+      done
+      [ -n "$done_one" ] || echo "NOT AVAILABLE: $choice"
+    done
+    ;;
+  prefer-ubuntu)
+    # Hardware data packages where Ubuntu 26.04 (which Framework supports) may be newer
+    # than openKylin: take Ubuntu's only when its upstream version is newer, nothing
+    # else would change origin, and then keep following Ubuntu's updates for it.
+    # Upstream part of a version: drop the Debian revision, or a native package's distro suffix.
+    upstream() { printf '%s\n' "$1" | sed -e 's/-[^-]*$//' -e 's/\(ubuntu\|ok\|build\|deb\)[0-9].*$//' -e 's/[+~.]$//'; }
+    pins=/etc/apt/preferences.d/81kirin-prefer-ubuntu
+    if [ ! -f /etc/apt/sources.list.d/kirin-ubuntu.sources ]; then
+      echo 'SKIPPED: Ubuntu repository not enabled'; exit 0
+    fi
+    rm -f "$pins"
+    for p in $(list /kirin-build/prefer-ubuntu.txt); do
+      ok=$(apt-cache madison "$p" 2>/dev/null | awk -F'|' '$3 !~ /archive\.ubuntu|security\.ubuntu|debian\.org/ {gsub(/ /,"",$2); print $2; exit}')
+      ub=$(apt-cache madison "$p" 2>/dev/null | awk -F'|' '$3 ~ /archive\.ubuntu|security\.ubuntu/ {gsub(/ /,"",$2); print $2; exit}')
+      have=$(dpkg-query -W -f='${Version}' "$p" 2>/dev/null || true)
+      if [ -z "$ub" ]; then echo "KEPT $p ${have:-$ok}: not in Ubuntu"; continue; fi
+      base=${have:-$ok}
+      if [ -n "$base" ] && ! dpkg --compare-versions "$(upstream "$ub")" gt "$(upstream "$base")"; then
+        echo "KEPT $p $base (Ubuntu has $ub, not newer)"; continue
+      fi
+      # Only this package may come from Ubuntu or Debian.
+      if apt-get -s -q install --no-install-recommends "$p=$ub" 2>/dev/null |
+         grep -E '^Inst ' | grep -v "^Inst $p " | grep -qE '\((\S+ )?(Debian|Ubuntu)[: ]'; then
+        echo "KEPT $p ${base:-none}: Ubuntu's $ub would pull other packages from Ubuntu"; continue
+      fi
       # shellcheck disable=SC2086
-      if apt-get install -y -q --no-install-recommends $apt_opts "$p" >/dev/null 2>&1; then
-        echo "installed $p from $(apt-cache policy "$p" | awk '/\*\*\*/{getline; print $2" "$3; exit}')"
+      if apt-get install -y -q --no-install-recommends $apt_opts "$p=$ub" >/dev/null 2>&1; then
+        for suite in resolute resolute-updates resolute-security; do
+          printf 'Package: %s\nPin: release o=Ubuntu,n=%s\nPin-Priority: 510\n\n' "$p" "$suite" >> "$pins"
+        done
+        echo "UBUNTU $p $ub (openKylin had ${base:-none})"
       else
-        echo "NOT AVAILABLE: $p"
+        echo "KEPT $p ${base:-none}: Ubuntu's $ub did not install"
       fi
     done
     ;;

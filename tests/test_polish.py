@@ -138,6 +138,9 @@ class TestPolish(unittest.TestCase):
         quiet('--root', str(self.root), '--apply')
         rule = (self.root / polish.FRAMEWORK_UDEV).read_text()
         self.assertIn('ATTR{idVendor}=="0bda", ATTR{idProduct}=="8156", ATTR{power/autosuspend}="20"', rule)
+        options = (self.root / polish.FRAMEWORK_MODPROBE).read_text()
+        self.assertIn('options nvme noacpi=1\n', options)
+        self.assertIn('blacklist cros-usbpd-charger\n', options)
 
     def test_refuses_live_root(self):
         self.assertEqual(quiet('--root', '/', '--apply'), 2)

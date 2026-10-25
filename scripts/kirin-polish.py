@@ -173,12 +173,22 @@ FRAMEWORK_RULES = '''# Kirin: Framework Laptop hardware tweaks (harmless on othe
 # Ethernet Expansion Card (Realtek 0bda:8156): short autosuspend delay so it saves power when idle
 ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="0bda", ATTR{idProduct}=="8156", ATTR{power/autosuspend}="20"
 '''
+FRAMEWORK_MODPROBE = 'etc/modprobe.d/kirin-framework.conf'
+FRAMEWORK_OPTIONS = '''# Kirin: Framework Laptop module options (from NixOS's Framework 13 Intel module)
+# Lower NVMe power use in suspend; ignored by drives that do not use ACPI hints.
+options nvme noacpi=1
+# Chromebook USB-PD charger driver: the Framework EC does not provide it and it logs a boot error.
+blacklist cros-usbpd-charger
+'''
 
 
 def apply(root: Path) -> list[str]:
     rules = root / FRAMEWORK_UDEV
     rules.parent.mkdir(parents=True, exist_ok=True)
     rules.write_text(FRAMEWORK_RULES, encoding='utf-8')
+    modprobe = root / FRAMEWORK_MODPROBE
+    modprobe.parent.mkdir(parents=True, exist_ok=True)
+    modprobe.write_text(FRAMEWORK_OPTIONS, encoding='utf-8')
     notes = apply_terminal(root)
     (root / 'etc/kirin-release').write_text(
         f'KIRIN_VERSION="{KIRIN_VERSION}"\nKIRIN_NAME="Kirin Linux"\nKIRIN_BASE="openKylin 3.0"\n', encoding='utf-8')
@@ -235,6 +245,8 @@ def audit(root: Path) -> list[str]:
                     problems.append(f'{rel} still opens files with {old}')
     if not (root / PINS_FILE).is_file():
         problems.append('taskbar pins missing')
+    if not (root / FRAMEWORK_MODPROBE).is_file():
+        problems.append('Framework module options missing')
     if installed(root, 'kitty.desktop'):
         if not (root / 'etc/xdg/kitty/kitty.conf').is_file():
             problems.append('kitty installed but not configured')
