@@ -44,3 +44,7 @@ Primary upstream references: [openKylin](https://www.openkylin.top/), [ZFSBootMe
 ## Languages
 
 Kirin's default is **British English (en_GB.UTF-8)** with **Russian (ru_RU.UTF-8)** as the second supported language. The offline image build excludes Chinese-language UI catalogues and menu translations while retaining all upstream AI model files, functional code and Unicode fonts. See [language policy](docs/LANGUAGES.md) and run the source-stage localisation/audit tool before ISO creation. Full UKUI translation still requires image-level testing.
+
+## No vendor account required
+
+Kirin removes openKylin ID, cloud settings sync, token check-ins and device binding from its target release; normal **local user accounts** and system authentication stay. Token Centre's package is `openkylin-token-center`. This source tree now includes a build-time offline [account integration audit](scripts/audit-online-accounts.py), an APT negative-priority pin and [account removal policy](docs/ACCOUNTS.md). The policy is not a claim that these components have already been removed from a functioning ISO: building and testing that image remain outstanding.

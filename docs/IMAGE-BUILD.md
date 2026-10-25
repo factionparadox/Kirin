@@ -35,3 +35,7 @@ ZFS-root, ZFSBootMenu, boot-environment cloning, rollback and graphical storage 
 ## Language-localisation stage
 
 After installing packages and staging the upstream AI payloads, use scripts/kirin-localise.py --root /path/to/staged-root --apply and --audit. Generate both en_GB.UTF-8 and ru_RU.UTF-8 locales inside the target image; test UKUI in both languages, and rerun the audit after package changes. See docs/LANGUAGES.md. Chinese catalogues may be excluded; never remove fonts or upstream model files.
+
+## Vendor account-removal gate
+
+Kirin must not ship openKylin ID, Token Centre, device registration or settings cloud sync. First inventory exact installed Huanghe packages and plugins; simulate dependency removal in the disposable target build environment. Purge the verified `openkylin-token-center` package, patch other confirmed account-dependent UI/service components, and preserve local Linux accounts, UKUI, installed AI model blobs and offline services. Stage the APT policy with `DESTDIR=/path/to/staged-root sh scripts/stage-account-policy.sh`, then run `python3 scripts/audit-online-accounts.py --root /path/to/staged-root` as a mandatory release gate. See `docs/ACCOUNTS.md` for source evidence, limitations and runtime tests.

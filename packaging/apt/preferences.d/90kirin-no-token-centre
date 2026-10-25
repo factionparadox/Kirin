@@ -1,0 +1,6 @@
+# Kirin does not ship openKylin's account/device-linked Token Centre.
+# APT's negative priority prevents a package version from being installed.
+# This does NOT remove an already-installed package.
+Package: openkylin-token-center
+Pin: version *
+Pin-Priority: -1
