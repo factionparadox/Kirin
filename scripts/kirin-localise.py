@@ -22,8 +22,9 @@ def load_translations(path=TRANSLATIONS_FILE):
 
 
 def norm(value):
-    """Collapse every Unicode whitespace run (incl. U+3000 and NBSP) to one space."""
-    return " ".join(value.split())
+    """Drop all Unicode whitespace (incl. U+3000 and NBSP): CJK text is matched
+    the same whether upstream wrote '讯飞输入法 属性设置' or '讯飞输入法属性设置'."""
+    return "".join(value.split())
 
 
 def translate(lines, table):

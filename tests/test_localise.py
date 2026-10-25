@@ -52,9 +52,10 @@ class TestImageLocale(unittest.TestCase):
 
     def test_translation_ignores_whitespace_variants(self):
         p = self.root / "usr/share/applications/com.iflytek.iflyime-setting.desktop"
-        p.write_text("[Desktop Entry]\nName=iFlyIME\nComment=讯飞输入法\u3000属性设置 \n", encoding="utf-8")
-        self.assertEqual(mod.main(["--root", str(self.root), "--apply"]), 0)
-        self.assertIn("Comment=iFlytek input method settings\n", p.read_text(encoding="utf-8"))
+        for value in ("讯飞输入法\u3000属性设置 ", "讯飞输入法属性设置"):
+            p.write_text(f"[Desktop Entry]\nName=iFlyIME\nComment={value}\n", encoding="utf-8")
+            self.assertEqual(mod.main(["--root", str(self.root), "--apply"]), 0)
+            self.assertIn("Comment=iFlytek input method settings\n", p.read_text(encoding="utf-8"))
 
     def test_untranslated_default_fails(self):
         p = self.root / "usr/share/applications/untranslated.desktop"
