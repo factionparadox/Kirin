@@ -103,7 +103,7 @@ class TestFetchFiles(Server):
 
     def test_real_library_manifest_is_valid(self):
         rows = files.read_manifest(Path(__file__).resolve().parents[1] / 'packaging/russian/library.tsv')
-        self.assertGreaterEqual(len(rows), 90)
+        self.assertGreaterEqual(len(rows), 15)
         voices = files.read_manifest(Path(__file__).resolve().parents[1] / 'packaging/russian/voices.tsv')
         self.assertEqual(len(voices), 8)
 

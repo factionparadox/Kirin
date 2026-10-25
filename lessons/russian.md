@@ -4,7 +4,7 @@ Kirin ships a Russian study kit that works offline:
 
 | Tool | What it is | Open it |
 | --- | --- | --- |
-| Course library | Public-domain US government courses: the Defense Language Institute (DLI) Russian Basic Course, FSI Russian (FAST and Active Introduction) and Peace Corps Russian. Textbooks, workbooks, grammar reference, readers and audio. | `kirin-learn library` |
+| Course library | Public-domain US government courses: FSI Russian (FAST, with audio, and Active Introduction), Peace Corps Russian, and several Defense Language Institute (DLI) Russian Basic Course volumes (lessons, a reader, dialogue guides and a dictionary). | `kirin-learn library` |
 | Dictionary | The English Wiktionary, offline in Kiwix: meanings, stress, IPA, full declension and conjugation tables. | `kirin-learn dictionary` |
 | Voices | Piper text-to-speech with four Russian voices (Irina, Denis, Dmitri, Ruslan). | `kirin-learn say 'Привет, как дела?'` |
 | AI tutor | Qwen3 30B, a local model that corrects your Russian and explains grammar in English. | `kirin-learn russian` |

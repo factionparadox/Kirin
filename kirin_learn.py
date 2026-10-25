@@ -34,7 +34,7 @@ TUTOR_PROMPT = '''You are a patient Russian tutor for a British English speaker 
 - Mark stress with an acute accent on Russian words you teach. Keep Russian at level {level}.
 - End with one short question in Russian, suited to level {level}, to keep the conversation going.
 - Be honest: if you are not sure about a stress, ending or usage, say so and suggest checking the
-  Wiktionary dictionary or the DLI Russian Basic Course in the Kirin library. Never invent sources.'''
+  Wiktionary dictionary or the FSI Russian course in the Kirin library. Never invent sources.'''
 EXPLANATIONS = {
     ('apt', 'update'): ('APT updates its local package indexes. It does not install newer versions.', 'apt(8), sources.list(5)'),
     ('apt', 'install'): ('APT resolves dependencies and installs specified packages; review the transaction before confirming.', 'apt(8)'),
@@ -245,7 +245,7 @@ def library(open_folder=False):
         pdfs = sum(1 for _ in course.rglob('*.pdf'))
         audio = sum(1 for _ in course.rglob('*.mp3'))
         print(f'  {course.name:32} {pdfs:3} books/workbooks  {audio:3} audio tracks')
-    print('\nStart with: DLI Russian Basic Course/Courses/Phase 1/Mod 01.pdf and its audio.')
+    print('\nStart with: FSI Russian/FAST/FsiRussianFast-Lessons1-5.pdf with FSI Russian FAST - Tape 1.mp3.')
     print('Open the folder: kirin-learn library --open')
     return 0
 
