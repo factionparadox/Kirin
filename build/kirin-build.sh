@@ -151,7 +151,12 @@ cleanup() {
 trap cleanup EXIT
 trap 'die "stage failed at line $LINENO: $BASH_COMMAND"' ERR
 
-in_chroot() { chroot "$ROOTFS" /kirin-build/chroot-steps.sh "$@"; }
+# Inside the image, use openKylin's PATH: the host's (e.g. Arch's, via sudo) may
+# lack the sbin directories dpkg needs. The host chroot binary is found first.
+in_chroot() {
+  local chroot_bin; chroot_bin=$(command -v chroot)
+  PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin "$chroot_bin" "$ROOTFS" /kirin-build/chroot-steps.sh "$@"
+}
 pkglist() { sed -e 's/#.*//' -e 's/[[:space:]]//g' -e '/^$/d' "$1"; }
 
 # ---------------------------------------------------------------- stages

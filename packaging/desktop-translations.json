@@ -1,0 +1,9 @@
+{
+  "_comment": "Translations for upstream .desktop entries whose default (untranslated) Name/GenericName/Comment is Chinese-only. Keyed by field, then by the exact upstream value. Applied by scripts/kirin-localise.py --apply.",
+  "Comment": {
+    "讯飞输入法 属性设置": {"en": "iFlytek input method settings", "ru": "Настройки метода ввода iFlytek"},
+    "讯飞输入法候选栏": {"en": "iFlytek input method candidate bar", "ru": "Панель вариантов метода ввода iFlytek"},
+    "讯飞输入法设置向导": {"en": "iFlytek input method setup wizard", "ru": "Мастер настройки метода ввода iFlytek"},
+    "UKUI控制面板": {"en": "UKUI control panel", "ru": "Панель управления UKUI"}
+  }
+}

@@ -40,6 +40,16 @@ class TestImageLocale(unittest.TestCase):
         self.assertNotIn("Name[zh_CN]", (self.root / "usr/share/applications/demo.desktop").read_text())
         self.assertIn("ru_RU.UTF-8", (self.root / "etc/locale.gen").read_text())
 
+    def test_known_chinese_default_translated(self):
+        p = self.root / "usr/share/applications/ukui-control-center.desktop"
+        p.write_text("[Desktop Entry]\nName=Settings\nComment=UKUI控制面板\nComment[zh_CN]=UKUI控制面板\n", encoding="utf-8")
+        self.assertEqual(mod.main(["--root", str(self.root), "--apply"]), 0)
+        self.assertEqual(mod.main(["--root", str(self.root), "--audit"]), 0)
+        text = p.read_text(encoding="utf-8")
+        self.assertIn("Comment=UKUI control panel\n", text)
+        self.assertIn("Comment[ru]=Панель управления UKUI\n", text)
+        self.assertNotIn("控制", text)
+
     def test_untranslated_default_fails(self):
         p = self.root / "usr/share/applications/untranslated.desktop"
         p.write_text("[Desktop Entry]\nName=中文\n", encoding="utf-8")

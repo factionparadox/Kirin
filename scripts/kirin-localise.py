@@ -10,6 +10,32 @@ ZH = re.compile(r"^zh(?:$|[_-](?:CN|TW|HK|SG|Hans|Hant)$)", re.I)
 ZH_NAME = re.compile(r"(?:^|[_.-])zh(?:[_-](?:CN|TW|HK|SG|Hans|Hant))?(?=[_.-]|$)", re.I)
 ZH_KEY = re.compile(r"^\s*[A-Za-z][A-Za-z0-9-]*\[zh(?:[_-][A-Za-z0-9@-]+)?\]\s*=", re.I)
 CJK = re.compile("[\u3400-\u9fff]")
+DEFAULT_KEY = re.compile(r"^(Name|GenericName|Comment)=(.*?)\r?\n?$")
+TRANSLATIONS_FILE = Path(__file__).resolve().parents[1] / "packaging/desktop-translations.json"
+
+
+def load_translations(path=TRANSLATIONS_FILE):
+    if not path.is_file():
+        return {}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return {k: v for k, v in data.items() if not k.startswith("_")}
+
+
+def translate(lines, table):
+    """Replace known Chinese-only defaults with English, adding Russian where absent."""
+    out = []
+    present = {x.split("=", 1)[0] for x in lines if "=" in x}
+    for line in lines:
+        m = DEFAULT_KEY.match(line)
+        entry = table.get(m.group(1), {}).get(m.group(2)) if m else None
+        if entry:
+            key = m.group(1)
+            out.append(f"{key}={entry['en']}\n")
+            if entry.get("ru") and f"{key}[ru]" not in present:
+                out.append(f"{key}[ru]={entry['ru']}\n")
+        else:
+            out.append(line)
+    return out
 LOCALE_DIRS = ("usr/share/locale", "usr/share/locale-langpack", "usr/share/man", "usr/share/help")
 CATALOG_DIRS = ("usr/share/qt5/translations", "usr/share/qt6/translations",
                 "usr/share/ukui/translations", "usr/share/kylin/translations")
@@ -46,7 +72,8 @@ def inside(root, rel, final_link_ok=False):
             raise ValueError(f"symlink in image path: {path}")
     return path
 
-def discover(root):
+def discover(root, table=None):
+    table = load_translations() if table is None else table
     # Symlinks are only ever removed as links, never followed: a zh_CN link to
     # another locale (e.g. zh_CN -> zh_Hans, or a hostile one to ru_RU) loses the
     # link while its target is judged on its own name.
@@ -76,7 +103,7 @@ def discover(root):
             for p in folder.rglob("*.desktop"):
                 if p.is_symlink(): continue   # never rewrite through a link; targets in these folders are scanned directly
                 raw = p.read_text(encoding="utf-8")
-                kept = [x for x in raw.splitlines(keepends=True) if not ZH_KEY.match(x)]
+                kept = translate([x for x in raw.splitlines(keepends=True) if not ZH_KEY.match(x)], table)
                 new = "".join(kept)
                 if new != raw: menus.append((p, new))
                 for line in kept:

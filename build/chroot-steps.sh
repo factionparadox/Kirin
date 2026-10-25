@@ -4,6 +4,9 @@
 set -eu
 [ -f /kirin-build/IN_CHROOT ] || { echo 'chroot-steps.sh: not inside a Kirin build chroot' >&2; exit 2; }
 export DEBIAN_FRONTEND=noninteractive LC_ALL=C.UTF-8
+# The host's PATH is inherited through sudo and chroot; on Arch it has no sbin
+# directories, so dpkg cannot find ldconfig or start-stop-daemon. Use openKylin's.
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 apt_opts='-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold'
 MULTIARCH=x86_64-linux-gnu
 FYAML_VERSION=0.9.6

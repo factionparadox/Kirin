@@ -4,6 +4,7 @@ import os, re, sys
 from pathlib import Path
 root, script, step, *args = sys.argv[1:]
 root = Path(root)
+assert '/usr/sbin' in os.environ['PATH'].split(':'), 'chroot run without sbin in PATH'
 assert script == '/kirin-build/chroot-steps.sh' and (root / 'kirin-build/IN_CHROOT').is_file(), 'chroot not prepared'
 assert (root / 'usr/sbin/policy-rc.d').is_file(), 'services not blocked'
 status = root / 'var/lib/dpkg/status'
