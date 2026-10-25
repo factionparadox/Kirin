@@ -13,12 +13,14 @@ This is the first build stage. The resulting ISO boots and installs with openKyl
 
 ## Steps
 
-1. Download the x86-64 ISO from <https://www.openkylin.top/downloads> and note the SHA-256 published alongside it.
+1. Download the x86-64 ISO from <https://www.openkylin.top/downloads>.
 2. Start the build from the repository root:
 
    ```sh
-   sudo build/kirin-build.sh --iso ~/Downloads/openKylin-3.0-x86_64.iso --iso-sha256 <published sha256>
+   sudo build/kirin-build.sh --iso openKylin-Desktop-V3.0-20260918-x86_64.iso
    ```
+
+   Optionally add `--iso-sha256 HEX` to refuse an ISO that doesn't match openKylin's published checksum. Either way, the ISO's hash is recorded in the build record.
 
 3. The build **stops after the inventory stage** (exit code 10). Review `work/upstream/upstream-models.json` and `work/upstream/upstream-models-owners.json`:
    - Every upstream AI model file should be listed.
@@ -26,7 +28,7 @@ This is the first build stage. The resulting ISO boots and installs with openKyl
 4. Continue past the review:
 
    ```sh
-   sudo build/kirin-build.sh --iso … --iso-sha256 … --from inventory --accept-inventory \
+   sudo build/kirin-build.sh --iso … --from inventory --accept-inventory \
         --model-inventory work/upstream/upstream-models.json
    ```
 
@@ -39,8 +41,8 @@ The build resumes where it stopped. Completed stages are skipped. `--from STAGE`
 | Stage | What it does |
 | --- | --- |
 | preflight | Checks the host OS and architecture, root access, tools, Python version and free space |
-| verify | Checks the ISO against the SHA-256 you supplied; records its size and volume ID |
-| extract | Unpacks the ISO tree and finds the root-filesystem squashfs (pass `--squashfs` if this is ambiguous), then unpacks it |
+| verify | Records the ISO's SHA-256, size and volume ID, and checks the hash if you passed `--iso-sha256` |
+| extract | Unpacks the ISO tree and finds the root-filesystem squashfs (pass `--squashfs` if this is ambiguous), then unpacks it. openKylin 3.0's squashfs is about 7.5 GB, and the ISO records its size wrapped at 4 GiB, so extraction cuts it short; the build detects this and copies the full file straight out of the ISO (`scripts/build/recover-squashfs.py`), proving the copy matches what was already extracted |
 | inventory | Lists candidate AI model files with hashes and owning packages, proves the list matches the untouched image, then **stops for review** |
 | payloads | Downloads Ollama from its GitHub release and checks it against the release's `sha256sum.txt`; pulls `qwen2.5-coder:7b-instruct` and verifies every blob against its manifest |
 | customise | Applies the language policy and APT pin; installs the base packages; purges the Token Centre and Software Store; installs Warehouse and Flatseal system-wide from Flathub; installs Ollama, its service and the model; installs Kirin Learn; generates `en_GB` and `ru_RU` locales |

@@ -95,7 +95,7 @@ Systemd stays, but Kirin's downstream build must remove the optional birthDate u
 `build/kirin-build.sh` remasters the official openKylin 3.0 ISO into a Kirin image. It needs an x86-64 Linux host (WSL2 works) with root, internet access and about 70 GB free, and it stops for a human review of the upstream AI model inventory before changing anything. See [Building the ISO](docs/BUILDING.md).
 
 ~~~sh
-sudo build/kirin-build.sh --iso openKylin-3.0-x86_64.iso --iso-sha256 <published sha256>
+sudo build/kirin-build.sh --iso openKylin-Desktop-V3.0-20260918-x86_64.iso
 ~~~
 
 ## Source-stage checks

@@ -20,6 +20,7 @@ def load(name):
 inventory = load('inventory-models')
 qwen = load('qwen-index')
 removal = load('check-removal')
+recovery = load('recover-squashfs')
 
 
 def quiet(fn, *args):
@@ -144,6 +145,73 @@ class TestRemoval(unittest.TestCase):
 
     def test_requested_but_not_removed_fails(self):
         self.assertTrue(removal.review(SIM, {'openkylin-token-center', 'kylin-software-center', 'ghost'}, set(), set()))
+
+
+def fake_squashfs(size):
+    import os, struct
+    body = bytearray(os.urandom(size))
+    body[:4] = b'hsqs'
+    struct.pack_into('<Q', body, 40, size)
+    return bytes(body)
+
+
+class TestRecovery(TempRoot):
+    WRAP = 64 * 1024
+
+    def make(self, size=300 * 1024, before=37 * 2048, decoy=True):
+        import os
+        full = fake_squashfs(size)
+        padded = full + b'\0' * (-len(full) % 4096)
+        lead = bytearray(os.urandom(before))
+        if decoy:   # another squashfs-looking sector that is not this file
+            lead[2048:2052] = b'hsqs'
+        iso = self.root / 'test.iso'
+        iso.write_bytes(bytes(lead) + padded + os.urandom(5000))
+        extracted = self.root / 'filesystem.squashfs'
+        extracted.write_bytes(padded[:len(padded) % self.WRAP])
+        return iso, extracted, padded
+
+    def test_recovers_wrapped_file(self):
+        iso, extracted, padded = self.make()
+        self.assertIn('recovered', recovery.recover(iso, extracted, self.WRAP))
+        self.assertEqual(extracted.read_bytes(), padded)
+        self.assertFalse((self.root / 'filesystem.squashfs.part').exists())
+
+    def test_finds_file_across_read_chunks(self):
+        old = recovery.CHUNK
+        recovery.CHUNK = 4096 + 3          # force the magic to straddle chunk boundaries
+        self.addCleanup(setattr, recovery, 'CHUNK', old)
+        iso, extracted, padded = self.make(before=50 * 2048)
+        recovery.recover(iso, extracted, self.WRAP)
+        self.assertEqual(extracted.read_bytes(), padded)
+
+    def test_complete_file_is_left_alone(self):
+        iso, extracted, padded = self.make()
+        extracted.write_bytes(padded)
+        self.assertEqual(recovery.recover(iso, extracted, self.WRAP), 'already complete')
+
+    def test_inconsistent_size_is_refused(self):
+        iso, extracted, padded = self.make()
+        extracted.write_bytes(padded[:len(padded) % self.WRAP - 4096])
+        with self.assertRaises(ValueError):
+            recovery.recover(iso, extracted, self.WRAP)
+
+    def test_mismatching_iso_is_refused_and_file_untouched(self):
+        iso, extracted, padded = self.make()
+        before = extracted.read_bytes()
+        data = bytearray(iso.read_bytes())
+        start = data.find(padded[:4096])
+        data[start + 9000] ^= 0xFF           # corrupt a byte inside the already-extracted part
+        iso.write_bytes(bytes(data))
+        with self.assertRaises(ValueError):
+            recovery.recover(iso, extracted, self.WRAP)
+        self.assertEqual(extracted.read_bytes(), before)
+
+    def test_not_squashfs_is_refused(self):
+        iso, extracted, _ = self.make()
+        extracted.write_bytes(b'x' * 8192)
+        with self.assertRaises(ValueError):
+            recovery.recover(iso, extracted, self.WRAP)
 
 
 if __name__ == '__main__':

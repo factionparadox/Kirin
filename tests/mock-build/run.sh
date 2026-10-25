@@ -8,12 +8,20 @@ HERE=$(cd -- "$(dirname -- "$0")" && pwd)
 REPO=$(cd -- "$HERE/../.." && pwd)
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
-export PATH="$HERE/stubs:$PATH" KIRIN_MIN_FREE_GB=1 MOCK_STATE="$T/state"
+export PATH="$HERE/stubs:$PATH" KIRIN_MIN_FREE_GB=1 MOCK_STATE="$T/state" KIRIN_TEST_WRAP=65536
 mkdir -p "$MOCK_STATE"
 
 fail() { echo "MOCK BUILD FAILED: $*" >&2; exit 1; }
 
-head -c 1048576 /dev/urandom > "$T/upstream.iso"
+# A fake ISO holding a fake root squashfs larger than the (scaled-down) wrap
+# size, so extraction cuts it short exactly as openKylin 3.0's 7.5 GB one does.
+python3 - "$T/upstream.iso" "$MOCK_STATE/squashfs.full" <<'EOF'
+import os, struct, sys
+size = 300 * 1024
+sq = bytearray(os.urandom(size)); sq[:4] = b'hsqs'; struct.pack_into('<Q', sq, 40, size)
+open(sys.argv[2], 'wb').write(sq)
+open(sys.argv[1], 'wb').write(os.urandom(40 * 2048) + sq + os.urandom(7000))
+EOF
 sha=$(sha256sum "$T/upstream.iso" | cut -d' ' -f1)
 run() { "$REPO/build/kirin-build.sh" --iso "$T/upstream.iso" --iso-sha256 "$sha" --work "$T/work" --out "$T/out" "$@"; }
 
@@ -33,9 +41,11 @@ echo '--- 1. wrong checksum is refused'
 if "$REPO/build/kirin-build.sh" --iso "$T/upstream.iso" --iso-sha256 "$(printf '0%.0s' {1..64})" \
      --work "$T/work" --out "$T/out" >/dev/null 2>&1; then fail 'bad checksum accepted'; fi
 
-echo '--- 2. first run stops for inventory review'
-set +e; run > "$T/log1" 2>&1; rc=$?; set -e
+echo '--- 2. first run, without a checksum, recovers the cut-short squashfs and stops for review'
+set +e; "$REPO/build/kirin-build.sh" --iso "$T/upstream.iso" --work "$T/work" --out "$T/out" > "$T/log1" 2>&1; rc=$?; set -e
 [ "$rc" -eq 10 ] || { cat "$T/log1"; fail "expected review stop (10), got $rc"; }
+grep -q 'came out incomplete' "$T/log1" && grep -q 'recovered 307200 bytes' "$T/log1" || { cat "$T/log1"; fail 'short squashfs not recovered'; }
+cmp -s "$T/work/iso/casper/filesystem.squashfs" "$MOCK_STATE/squashfs.full" || fail 'recovered squashfs differs'
 grep -q 'opt/kylin-ai/asr.onnx' "$T/work/upstream/upstream-models.json" || fail 'model not inventoried'
 [ ! -e "$T/work/.done-customise" ] || fail 'image modified before review'
 

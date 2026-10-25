@@ -3,10 +3,16 @@
 import os, sys
 from pathlib import Path
 a = sys.argv[1:]
+def complete(path):
+    data = Path(path).read_bytes()
+    return data[:4] == b'hsqs' and len(data) >= int.from_bytes(data[40:48], 'little')
 if a[0] == '-s':
+    if not complete(a[1]):
+        print('Read on filesystem failed because EOF\nFATAL ERROR: File system corruption detected'); sys.exit(1)
     print('Found a valid SQUASHFS 4:0 superblock\nCompression xz\nBlock size 131072'); sys.exit(0)
 if a[0] == '-d':
     r = Path(a[1]); assert not r.exists(); assert a[2].endswith('filesystem.squashfs'), a[2]
+    assert Path(a[2]).read_bytes() == Path(os.environ['MOCK_STATE'], 'squashfs.full').read_bytes(), 'unpacking a damaged squashfs'
     for d in ('var/lib/dpkg/info', 'opt/kylin-ai', 'etc', 'usr/sbin', 'usr/share/applications', 'run/systemd/resolve'):
         (r / d).mkdir(parents=True, exist_ok=True)
     pk = ['apt', 'dpkg', 'kylin-ai', 'openkylin-token-center', 'openkylin-desktop-meta']

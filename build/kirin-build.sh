@@ -5,7 +5,7 @@
 # free. Everything happens under --work; nothing on the host is modified
 # except temporary bind mounts into the work directory.
 #
-#   sudo build/kirin-build.sh --iso openKylin-3.0-x86_64.iso --iso-sha256 <hex>
+#   sudo build/kirin-build.sh --iso openKylin-Desktop-V3.0-20260918-x86_64.iso
 #
 # See docs/BUILDING.md for stages, review gates and what the output is (and is not).
 set -Eeuo pipefail
@@ -24,11 +24,13 @@ ALLOW_REMOVAL=()
 
 usage() {
   cat <<EOF
-Usage: sudo $0 --iso FILE --iso-sha256 HEX [options]
+Usage: sudo $0 --iso FILE [options]
 
 Required:
   --iso FILE              Official openKylin 3.0 x86-64 ISO, downloaded by you
-  --iso-sha256 HEX        SHA-256 published by openKylin for that ISO
+
+Optional check:
+  --iso-sha256 HEX        Refuse the ISO unless its SHA-256 matches HEX
 
 Review gates:
   --accept-inventory      Continue past the AI-model inventory after you have reviewed it
@@ -72,8 +74,8 @@ info() { printf '    %s\n' "$*"; }
 die()  { printf '\nERROR: %s\n' "$*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || die "missing host tool: $1 ($2)"; }
 
-[ -n "$ISO" ] && [ -n "$ISO_SHA256" ] || { usage >&2; exit 2; }
-[[ $ISO_SHA256 =~ ^[0-9a-f]{64}$ ]] || die '--iso-sha256 must be 64 hex digits'
+if [ -z "$ISO" ]; then usage >&2; exit 2; fi
+if [ -n "$ISO_SHA256" ] && ! [[ $ISO_SHA256 =~ ^[0-9a-f]{64}$ ]]; then die '--iso-sha256 must be 64 hex digits'; fi
 ISO=$(realpath -e -- "$ISO") || die "ISO not found"
 mkdir -p "$WORK" "$OUT"
 WORK=$(realpath -- "$WORK") OUT=$(realpath -- "$OUT")
@@ -169,14 +171,19 @@ stage_preflight() {
 stage_verify() {
   log 'Verifying the upstream ISO'
   local actual; actual=$(sha256sum -- "$ISO" | cut -d' ' -f1)
-  [ "$actual" = "$ISO_SHA256" ] || die "ISO checksum mismatch: got $actual"
+  if [ -n "$ISO_SHA256" ]; then
+    [ "$actual" = "$ISO_SHA256" ] || die "ISO checksum mismatch: got $actual"
+    info 'sha256 matches'
+  else
+    info "sha256 $actual (not checked; recorded in the build record)"
+  fi
   local volid; volid=$(xorriso -indev "$ISO" -pvd_info 2>/dev/null | sed -n 's/^Volume Id *: *//p' | head -1)
   python3 - "$UPSTREAM/iso.json" "$(basename -- "$ISO")" "$actual" "$(stat -c %s -- "$ISO")" "$volid" <<'PY'
 import json, sys
 out, name, sha, size, volid = sys.argv[1:]
 json.dump({'file': name, 'sha256': sha, 'size': int(size), 'volume_id': volid}, open(out, 'w'), indent=2)
 PY
-  info "sha256 ok; volume id: ${volid:-unknown}"
+  info "volume id: ${volid:-unknown}"
 }
 
 stage_extract() {
@@ -185,6 +192,18 @@ stage_extract() {
   xorriso -osirrox on -indev "$ISO" -extract / "$ISOTREE" > "$UPSTREAM/extract.log" 2>&1 ||
     die "ISO extraction failed; see $UPSTREAM/extract.log"
   chmod -R u+w "$ISOTREE"
+
+  # Files over 4 GiB can come out of the ISO cut short (their recorded size wraps
+  # at 2^32). Check every squashfs and re-read any short one from the ISO.
+  local sq
+  while IFS= read -r -d '' sq; do
+    unsquashfs -s "$ISOTREE/$sq" > /dev/null 2>&1 && continue
+    info "$sq came out incomplete ($(stat -c %s "$ISOTREE/$sq") bytes); re-reading it from the ISO"
+    python3 "$REPO/scripts/build/recover-squashfs.py" --iso "$ISO" --file "$ISOTREE/$sq" \
+        ${KIRIN_TEST_WRAP:+--wrap "$KIRIN_TEST_WRAP"} | sed 's/^/    /' ||
+      die "could not recover $sq from the ISO; the download may be damaged, so re-download it"
+    unsquashfs -s "$ISOTREE/$sq" > /dev/null 2>&1 || die "$sq is still unreadable after recovery"
+  done < <(find "$ISOTREE" -type f -name '*.squashfs' -printf '%P\0')
 
   if [ -z "$SQUASHFS_REL" ]; then
     mapfile -t found < <(find "$ISOTREE" -type f -name '*.squashfs' -printf '%s %P\n' | sort -rn)
@@ -233,7 +252,7 @@ REVIEW REQUIRED before the image is modified.
   Owners:    $owners
 Check that every upstream AI model is listed and nothing unrelated is. Edit the
 inventory if needed (keep sha256 values from the file), then continue with:
-  sudo $0 --iso '$ISO' --iso-sha256 $ISO_SHA256 --from inventory --accept-inventory \\
+  sudo $0 --iso '$ISO' --from inventory --accept-inventory \\
        [--model-inventory $inv]
 EOF
     exit 10
