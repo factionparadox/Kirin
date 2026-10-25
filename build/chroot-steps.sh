@@ -250,6 +250,20 @@ case "$step" in
     done
     chown -R ollama:ollama /usr/share/ollama
     systemctl enable ollama.service
+    # Fingerprints: fprintd replaces openKylin's biometric service (which never drove the
+    # Framework's Goodix reader). Only switched over if libpam-fprintd actually installed.
+    if dpkg-query -W -f='${db:Status-Abbrev}' libpam-fprintd 2>/dev/null | grep -q '^ii'; then
+      for prof in /usr/share/pam-configs/*; do
+        if [ -f "$prof" ] && grep -qi 'biometric' "$prof"; then pam-auth-update --package --remove "$(basename "$prof")"; fi
+      done
+      pam-auth-update --package --enable fprintd || true
+      for unit in $(systemctl list-unit-files --no-legend 'biometric*' 2>/dev/null | awk '{print $1}'); do
+        systemctl mask "$unit" >/dev/null 2>&1 && echo "masked $unit"
+      done
+      echo 'FINGERPRINT: fprintd enabled for login, lock screen and sudo'
+    else
+      echo 'FINGERPRINT: libpam-fprintd not installed; leaving openKylin biometrics as they are'
+    fi
     # Kirin defaults written by scripts/kirin-polish.py: schema overrides and the default terminal.
     if command -v glib-compile-schemas >/dev/null; then glib-compile-schemas /usr/share/glib-2.0/schemas || true; fi
     if [ -x /usr/bin/kitty ] && update-alternatives --list x-terminal-emulator 2>/dev/null | grep -qx /usr/bin/kitty; then

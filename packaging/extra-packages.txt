@@ -12,6 +12,10 @@ vlc
 kitty
 fish
 xdg-terminal-exec
+fprintd
+libpam-fprintd
+fwupd
+iio-sensor-proxy
 mpv
 fzf
 yt-dlp

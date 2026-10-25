@@ -37,6 +37,8 @@ ITEMS = [
      'Приложения', 'Установка и управление приложениями Flatpak в Warehouse.'),
     ('libreoffice-startcenter.desktop', 'Office', 'Documents, spreadsheets and presentations in LibreOffice.',
      'Офис', 'Документы, таблицы и презентации в LibreOffice.'),
+    ('kirin-fingerprint.desktop', 'Fingerprint login', 'Enrol a finger to log in, unlock the screen and approve sudo.',
+     'Вход по отпечатку', 'Добавьте отпечаток для входа, разблокировки и sudo.'),
     ('ukui-control-center.desktop', 'Settings', 'Language, keyboard, appearance and accounts.',
      'Настройки', 'Язык, клавиатура, оформление и учётные записи.'),
 ]

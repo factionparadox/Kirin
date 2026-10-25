@@ -134,6 +134,11 @@ class TestPolish(unittest.TestCase):
         pins = json.loads((self.root / polish.PINS_FILE).read_text())['quickLaunchers']
         self.assertIn('/usr/share/applications/mate-terminal.desktop', pins)
 
+    def test_framework_ethernet_rule(self):
+        quiet('--root', str(self.root), '--apply')
+        rule = (self.root / polish.FRAMEWORK_UDEV).read_text()
+        self.assertIn('ATTR{idVendor}=="0bda", ATTR{idProduct}=="8156", ATTR{power/autosuspend}="20"', rule)
+
     def test_refuses_live_root(self):
         self.assertEqual(quiet('--root', '/', '--apply'), 2)
 

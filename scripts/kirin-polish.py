@@ -168,7 +168,17 @@ def apply_terminal(root: Path) -> list[str]:
     return [f'terminal: kitty (translucent, blurred{", fish" if has_fish else ""}); MATE Terminal hidden']
 
 
+FRAMEWORK_UDEV = 'etc/udev/rules.d/90-kirin-framework.rules'
+FRAMEWORK_RULES = '''# Kirin: Framework Laptop hardware tweaks (harmless on other machines)
+# Ethernet Expansion Card (Realtek 0bda:8156): short autosuspend delay so it saves power when idle
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="0bda", ATTR{idProduct}=="8156", ATTR{power/autosuspend}="20"
+'''
+
+
 def apply(root: Path) -> list[str]:
+    rules = root / FRAMEWORK_UDEV
+    rules.parent.mkdir(parents=True, exist_ok=True)
+    rules.write_text(FRAMEWORK_RULES, encoding='utf-8')
     notes = apply_terminal(root)
     (root / 'etc/kirin-release').write_text(
         f'KIRIN_VERSION="{KIRIN_VERSION}"\nKIRIN_NAME="Kirin Linux"\nKIRIN_BASE="openKylin 3.0"\n', encoding='utf-8')

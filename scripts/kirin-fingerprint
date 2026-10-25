@@ -1,0 +1,51 @@
+#!/bin/sh
+# kirin-fingerprint: set up and manage fingerprint login with fprintd.
+# Kirin uses fprintd (the standard Linux fingerprint stack) instead of
+# openKylin's biometric service. Usage: kirin-fingerprint [enroll|verify|list|delete|status]
+set -eu
+
+say() { printf '%s\n' "$*"; }
+need() { command -v "$1" >/dev/null 2>&1 || { say "$1 is not installed (package: fprintd)."; exit 1; }; }
+
+case "${LANG:-}" in
+  ru*) T_TITLE='Отпечатки пальцев Kirin'; T_ENROLL='Приложите палец несколько раз, пока не появится enroll-completed.';
+       T_DONE='Готово. Теперь отпечаток можно использовать для входа, разблокировки и sudo.';
+       T_NONE='Сканер отпечатков не найден.'; T_ASK='Что сделать? [1] добавить [2] проверить [3] список [4] удалить [q] выход: ' ;;
+  *)   T_TITLE='Kirin fingerprint setup'; T_ENROLL='Touch the sensor repeatedly until you see enroll-completed.';
+       T_DONE='Done. You can now use your fingerprint to log in, unlock and approve sudo.';
+       T_NONE='No fingerprint reader found.'; T_ASK='What next? [1] enrol [2] test [3] list [4] delete [q] quit: ' ;;
+esac
+
+reader() { ! fprintd-list "$USER" 2>&1 | grep -qi -e 'no devices' -e 'found 0 devices'; }
+
+status() {
+  need fprintd-list
+  if ! reader; then
+    say "$T_NONE"
+    say "Check: lsusb | grep -i -E 'goodix|fingerprint'   and   systemctl status fprintd"
+    say "Framework readers with firmware 01000320 need an update: fwupdmgr refresh && fwupdmgr update"
+    return 1
+  fi
+  fprintd-list "$USER"
+}
+
+enroll() { need fprintd-enroll; say "$T_ENROLL"; fprintd-enroll "$USER" && say "$T_DONE"; }
+verify() { need fprintd-verify; fprintd-verify "$USER"; }
+delete() { need fprintd-delete; fprintd-delete "$USER"; }
+
+case "${1:-menu}" in
+  enroll|enrol) enroll ;;
+  verify|test)  verify ;;
+  list|status)  status ;;
+  delete)       delete ;;
+  menu)
+    say "$T_TITLE"; say ''
+    status || true
+    while :; do
+      printf '%s' "$T_ASK"; read -r choice || exit 0
+      case "$choice" in
+        1) enroll ;; 2) verify ;; 3) status || true ;; 4) delete ;; q|Q|'') exit 0 ;;
+      esac
+    done ;;
+  *) say 'Usage: kirin-fingerprint [enroll|verify|list|delete]'; exit 2 ;;
+esac

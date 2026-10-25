@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Fingerprint Setup
+Name[ru]=Настройка отпечатков пальцев
+Comment=Enrol your fingerprint for login, unlocking and sudo
+Comment[ru]=Добавьте отпечаток для входа, разблокировки и sudo
+Exec=kirin-fingerprint
+Icon=fingerprint-gui
+Terminal=true
+Categories=Settings;Security;
