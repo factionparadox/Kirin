@@ -28,7 +28,7 @@ compat_libfyaml() {
 
   installed_set > "$work/before"
   # shellcheck disable=SC2086
-  apt-get install -y --no-install-recommends $apt_opts gcc make libc6-dev binutils pkg-config
+  apt-get install -y --no-install-recommends $apt_opts gcc make m4 libc6-dev binutils pkg-config
   installed_set > "$work/after"
   comm -13 "$work/before" "$work/after" > "$work/tools"
 

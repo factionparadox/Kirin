@@ -36,11 +36,13 @@ def root_check(root):
         raise ValueError("requires an existing nonsymlink offline image root other than /")
     return root
 
-def inside(root, rel):
+def inside(root, rel, final_link_ok=False):
+    """Path of rel under root, refusing symlinked components (optionally not the last)."""
     path = root
-    for part in Path(rel).parts:
+    parts = Path(rel).parts
+    for i, part in enumerate(parts):
         path = path / part
-        if path.is_symlink():
+        if path.is_symlink() and not (final_link_ok and i == len(parts) - 1):
             raise ValueError(f"symlink in image path: {path}")
     return path
 
@@ -98,7 +100,10 @@ def run(root, mode):
             if not any(d.iterdir()): d.rmdir()
         for p, content in menus: p.write_text(content, encoding="utf-8")
         for rel, value in POLICY.items():
-            path = inside(root, rel)
+            path = inside(root, rel, final_link_ok=True)
+            # e.g. openKylin's etc/default/locale is a link to locale.conf: replace the
+            # link with Kirin's own file rather than writing through it.
+            if path.is_symlink(): path.unlink()
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(value, encoding="utf-8")
     elif mode == "audit":
@@ -106,8 +111,8 @@ def run(root, mode):
         problems += [f"Chinese translation link: {p.relative_to(root)}" for p in links]
         problems += [f"Chinese desktop translation: {p.relative_to(root)}" for p, _ in menus]
         for rel, content in POLICY.items():
-            path = inside(root, rel)
-            if not path.is_file() or path.read_text(encoding="utf-8") != content:
+            path = inside(root, rel, final_link_ok=True)
+            if path.is_symlink() or not path.is_file() or path.read_text(encoding="utf-8") != content:
                 problems.append(f"locale policy missing/modified: {rel}")
         for item in problems: print("FAIL:", item)
         if problems: return 1

@@ -61,6 +61,16 @@ class TestImageLocale(unittest.TestCase):
             self.assertFalse(link.is_symlink(), link)
         self.assertEqual((parent / "ru_RU/LC_MESSAGES/panel.mo").read_bytes(), b"untouched")
 
+    def test_symlinked_policy_file_replaced_not_followed(self):
+        etc = self.root / "etc"
+        (etc / "default").mkdir(parents=True)
+        (etc / "locale.conf").write_text("LANG=zh_CN.UTF-8\n")
+        (etc / "default/locale").symlink_to("../locale.conf")
+        self.assertEqual(mod.main(["--root", str(self.root), "--apply"]), 0)
+        self.assertFalse((etc / "default/locale").is_symlink())
+        self.assertEqual(mod.main(["--root", str(self.root), "--audit"]), 0)
+        self.assertEqual((etc / "locale.conf").read_text(), "LANG=en_GB.UTF-8\n")
+
     def test_symlinked_scan_root_still_refused(self):
         real = self.root / "elsewhere"
         real.mkdir()
