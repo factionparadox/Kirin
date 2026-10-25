@@ -89,6 +89,51 @@ class TestPolish(unittest.TestCase):
         self.assertIn('/var/lib/flatpak/exports/share/applications/com.jeffser.Alpaca.desktop', pins)
         self.assertNotIn('/usr/share/applications/firefox.desktop', pins)
 
+    def add_kitty(self, fish=True):
+        apps = self.root / 'usr/share/applications'
+        (apps / 'kitty.desktop').write_text('[Desktop Entry]\n')
+        (apps / 'mate-terminal.desktop').write_text('[Desktop Entry]\nName=MATE Terminal\nExec=mate-terminal\n')
+        if fish:
+            (self.root / 'usr/bin').mkdir(parents=True, exist_ok=True)
+            (self.root / 'usr/bin/fish').write_text('')
+        schemas = self.root / 'usr/share/glib-2.0/schemas'
+        schemas.mkdir(parents=True)
+        (schemas / 'org.mate.applications.gschema.xml').write_text(
+            '<schemalist><schema id="org.mate.applications-terminal" path="/x/"></schema></schemalist>')
+
+    def test_kitty_becomes_default_with_fish(self):
+        self.add_kitty()
+        quiet('--root', str(self.root), '--apply')
+        conf = (self.root / 'etc/xdg/kitty/kitty.conf').read_text()
+        self.assertIn('background_opacity         0.85', conf)
+        self.assertIn('background_blur            32', conf)
+        self.assertIn('shell /usr/bin/fish', conf)
+        self.assertIn('fastfetch', (self.root / 'etc/fish/conf.d/kirin.fish').read_text())
+        self.assertEqual((self.root / 'etc/xdg/xdg-terminals.list').read_text(), 'kitty.desktop\n')
+        override = (self.root / polish.SCHEMA_OVERRIDE).read_text()
+        self.assertIn("[org.mate.applications-terminal]\nexec='kitty'", override)
+        self.assertNotIn('org.gnome.desktop.default-applications.terminal', override)   # schema absent: skipped
+        mate = (self.root / 'usr/share/applications/mate-terminal.desktop').read_text()
+        self.assertIn('[Desktop Entry]\nNoDisplay=true\n', mate)
+        pins = json.loads((self.root / polish.PINS_FILE).read_text())['quickLaunchers']
+        self.assertIn('/usr/share/applications/kitty.desktop', pins)
+        self.assertNotIn('/usr/share/applications/mate-terminal.desktop', pins)
+        self.assertEqual(quiet('--root', str(self.root), '--audit'), 0)
+        quiet('--root', str(self.root), '--apply')
+        self.assertEqual((self.root / 'usr/share/applications/mate-terminal.desktop').read_text().count('NoDisplay'), 1)
+
+    def test_kitty_without_fish_keeps_default_shell(self):
+        self.add_kitty(fish=False)
+        quiet('--root', str(self.root), '--apply')
+        self.assertNotIn('shell /usr/bin/fish', (self.root / 'etc/xdg/kitty/kitty.conf').read_text())
+        self.assertFalse((self.root / 'etc/fish/conf.d/kirin.fish').exists())
+
+    def test_no_kitty_keeps_mate(self):
+        quiet('--root', str(self.root), '--apply')
+        self.assertFalse((self.root / 'etc/xdg/kitty/kitty.conf').exists())
+        pins = json.loads((self.root / polish.PINS_FILE).read_text())['quickLaunchers']
+        self.assertIn('/usr/share/applications/mate-terminal.desktop', pins)
+
     def test_refuses_live_root(self):
         self.assertEqual(quiet('--root', '/', '--apply'), 2)
 

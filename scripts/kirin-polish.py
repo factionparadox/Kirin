@@ -10,6 +10,9 @@
   Only mappings whose target app is installed are changed.
 * Taskbar pins for new users (UKUI task manager quickLaunchers), skipping any
   app that is not installed.
+* Terminal: if kitty is installed it becomes the default terminal (translucent,
+  blurred, Kirin colours, running fish if installed) and MATE Terminal is hidden
+  from the menu but kept, because parts of UKUI call it directly.
 """
 from __future__ import annotations
 
@@ -17,7 +20,11 @@ import argparse
 import json
 from pathlib import Path
 import re
+import shutil
 import sys
+
+REPO = Path(__file__).resolve().parents[1]
+TERMINAL_DIR = REPO / 'packaging/terminal'
 
 KIRIN_VERSION = '1.0'
 HOSTNAME = 'kirin'
@@ -40,7 +47,7 @@ EXTRA_DEFAULTS = {   # types openKylin leaves unset or sends elsewhere
     'audio/flac': 'vlc.desktop', 'audio/ogg': 'vlc.desktop', 'audio/mp4': 'vlc.desktop',
     'video/x-ms-wmv': 'vlc.desktop', 'video/ogg': 'vlc.desktop',
 }
-PINS = ('peony.desktop', 'mate-terminal.desktop', 'firefox.desktop', 'com.jeffser.Alpaca.desktop',
+PINS = ('peony.desktop', 'kitty.desktop', 'mate-terminal.desktop', 'firefox.desktop', 'com.jeffser.Alpaca.desktop',
         'libreoffice-startcenter.desktop', 'vlc.desktop', 'kirin-learn.desktop', 'ukui-control-center.desktop')
 PINS_FILE = 'etc/skel/.config/org.ukui/_ukui-config-global/org.ukui.panel.taskManager.json'
 BASHRC_BEGIN = '# >>> Kirin: Fastfetch in new terminals'
@@ -52,6 +59,13 @@ if [ -n "$PS1" ] && [ -z "$KIRIN_FASTFETCH_SHOWN" ] && [ ! -e "$HOME/.config/kir
 fi
 # <<< Kirin
 '''
+
+
+TERMINAL_SCHEMAS = {   # schema id -> keys; only written when the schema exists in the image
+    'org.mate.applications-terminal': {'exec': "'kitty'", 'exec-arg': "'--'"},
+    'org.gnome.desktop.default-applications.terminal': {'exec': "'kitty'", 'exec-arg': "'--'"},
+}
+SCHEMA_OVERRIDE = 'usr/share/glib-2.0/schemas/90_kirin-terminal.gschema.override'
 
 
 def image_root(root: Path) -> Path:
@@ -107,8 +121,55 @@ def set_casper(text: str) -> str:
     return '\n'.join(out) + '\n'
 
 
+def schema_ids(root: Path) -> set[str]:
+    ids = set()
+    for p in (root / 'usr/share/glib-2.0/schemas').glob('*.gschema.xml'):
+        ids.update(re.findall(r'<schema [^>]*id="([^"]+)"', p.read_text(encoding='utf-8', errors='replace')))
+    return ids
+
+
+def hide_desktop(path: Path) -> None:
+    lines = path.read_text(encoding='utf-8').splitlines()
+    if any(l.strip() == 'NoDisplay=true' for l in lines):
+        return
+    out, done = [], False
+    for line in lines:
+        out.append(line)
+        if line.strip() == '[Desktop Entry]' and not done:
+            out.append('NoDisplay=true')
+            done = True
+    path.write_text('\n'.join(out) + '\n', encoding='utf-8')
+
+
+def apply_terminal(root: Path) -> list[str]:
+    if not installed(root, 'kitty.desktop'):
+        return ['terminal: kitty not installed, keeping MATE Terminal']
+    has_fish = (root / 'usr/bin/fish').is_file()
+    conf = (TERMINAL_DIR / 'kitty.conf').read_text(encoding='utf-8')
+    if has_fish:
+        conf += '\n# Kirin: kitty starts fish (your login shell is unchanged)\nshell /usr/bin/fish\n'
+    dest = root / 'etc/xdg/kitty/kitty.conf'
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(conf, encoding='utf-8')
+    if has_fish:
+        fish = root / 'etc/fish/conf.d/kirin.fish'
+        fish.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(TERMINAL_DIR / 'kirin.fish', fish)
+    (root / 'etc/xdg/xdg-terminals.list').write_text('kitty.desktop\n', encoding='utf-8')
+    known = schema_ids(root)
+    blocks = [f'[{sid}]\n' + ''.join(f'{k}={v}\n' for k, v in keys.items())
+              for sid, keys in TERMINAL_SCHEMAS.items() if sid in known]
+    override = root / SCHEMA_OVERRIDE
+    if blocks:
+        override.write_text('# Kirin: kitty is the default terminal\n' + '\n'.join(blocks), encoding='utf-8')
+    mate = root / 'usr/share/applications/mate-terminal.desktop'
+    if mate.is_file() and not mate.is_symlink():
+        hide_desktop(mate)
+    return [f'terminal: kitty (translucent, blurred{", fish" if has_fish else ""}); MATE Terminal hidden']
+
+
 def apply(root: Path) -> list[str]:
-    notes = []
+    notes = apply_terminal(root)
     (root / 'etc/kirin-release').write_text(
         f'KIRIN_VERSION="{KIRIN_VERSION}"\nKIRIN_NAME="Kirin Linux"\nKIRIN_BASE="openKylin 3.0"\n', encoding='utf-8')
     (root / 'etc/hostname').write_text(HOSTNAME + '\n', encoding='utf-8')
@@ -136,6 +197,8 @@ def apply(root: Path) -> list[str]:
             p.write_text(rewrite_mimeapps(p.read_text(encoding='utf-8'), m, extra), encoding='utf-8')
     notes.append(f'default apps: {", ".join(sorted(set(m.values()))) or "none available"}')
     pins = [str(Path('/') / d / p) for p in PINS for d in APP_DIRS if (root / d / p).is_file()]
+    if installed(root, 'kitty.desktop'):
+        pins = [p for p in pins if not p.endswith('/mate-terminal.desktop')]
     pins = list(dict.fromkeys(pins))
     pin_file = root / PINS_FILE
     pin_file.parent.mkdir(parents=True, exist_ok=True)
@@ -162,6 +225,11 @@ def audit(root: Path) -> list[str]:
                     problems.append(f'{rel} still opens files with {old}')
     if not (root / PINS_FILE).is_file():
         problems.append('taskbar pins missing')
+    if installed(root, 'kitty.desktop'):
+        if not (root / 'etc/xdg/kitty/kitty.conf').is_file():
+            problems.append('kitty installed but not configured')
+        if (root / 'usr/bin/fish').is_file() and not (root / 'etc/fish/conf.d/kirin.fish').is_file():
+            problems.append('fish installed but Kirin fish config missing')
     return problems
 
 

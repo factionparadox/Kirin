@@ -9,6 +9,9 @@ libreoffice-help-ru
 hunspell-en-gb
 hunspell-ru
 vlc
+kitty
+fish
+xdg-terminal-exec
 mpv
 fzf
 yt-dlp

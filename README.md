@@ -25,7 +25,7 @@ Inspired by [Archon/Cognoscenti](https://github.com/factionparadox/Archon), Kiri
 | Applications | LibreOffice (en-GB, ru), VLC, Proton VPN/Pass/Mail (official packages), Discord, Sober, ani-cli |
 | Kirin packages | Built from pinned upstream sources (`packaging/debs`), installed in the ISO and published as a signed APT repository ([Kirin repo](docs/KIRIN-REPO.md)) |
 | Branding | Kirin Linux 1.0: boot splash, menu names, OS name, Fastfetch logo and icons ([Branding](docs/BRANDING.md)) |
-| Desktop defaults | Welcome to Kirin on first login; taskbar pins; LibreOffice and VLC as default apps (WPS Office removed); Fastfetch in new terminals; hostname `kirin` |
+| Desktop defaults | Welcome to Kirin on first login; taskbar pins; LibreOffice and VLC as default apps (WPS Office removed); kitty terminal (translucent, blurred) with fish; Fastfetch in new terminals; hostname `kirin` |
 | Web apps | Planned Web App Studio for ChatGPT, Claude and arbitrary websites |
 | Learning | Kirin Learn, offline lessons, Vim, Neovim and native tutors |
 | Russian study | Local AI tutor (Qwen3 30B), Piper Russian voices, public-domain DLI/FSI/Peace Corps courses, offline Wiktionary ([Russian learning kit](docs/RUSSIAN.md)) |

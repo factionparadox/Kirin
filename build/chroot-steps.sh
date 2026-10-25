@@ -250,6 +250,11 @@ case "$step" in
     done
     chown -R ollama:ollama /usr/share/ollama
     systemctl enable ollama.service
+    # Kirin defaults written by scripts/kirin-polish.py: schema overrides and the default terminal.
+    if command -v glib-compile-schemas >/dev/null; then glib-compile-schemas /usr/share/glib-2.0/schemas || true; fi
+    if [ -x /usr/bin/kitty ] && update-alternatives --list x-terminal-emulator 2>/dev/null | grep -qx /usr/bin/kitty; then
+      update-alternatives --set x-terminal-emulator /usr/bin/kitty
+    fi
     # Kirin boot splash: select the theme, then rebuild every initramfs.
     if [ -f /usr/share/plymouth/themes/kirin/kirin.plymouth ]; then
       if command -v update-alternatives >/dev/null; then
