@@ -39,6 +39,9 @@ def verify_qwen(model_index: Path, blobs_root: Path) -> list[str]:
     if not entry.get('blobs') or not isinstance(entry['blobs'], list):
         return ['coding-model blob inventory is missing']
     problems = []
+    total_size = sum(b.get('size', 0) for b in entry['blobs'] if isinstance(b, dict) and type(b.get('size')) is int and b['size'] > 0)
+    if total_size < 4_000_000_000:
+        problems.append('Qwen2.5-Coder 7B payload under 4 GB: image is incomplete')
     for blob in entry['blobs']:
         sha = blob.get('sha256') if isinstance(blob, dict) else None
         if not isinstance(sha, str) or len(sha) != 64 or any(c not in '0123456789abcdef' for c in sha):
