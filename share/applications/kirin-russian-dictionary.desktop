@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Russian Dictionary (Wiktionary)
+Name[ru]=Словарь (Викисловарь)
+Comment=Offline Wiktionary with stress, declension and conjugation tables
+Comment[ru]=Офлайн-Викисловарь с ударениями и таблицами склонения и спряжения
+Exec=kirin-learn dictionary
+Icon=accessories-dictionary
+Terminal=false
+Categories=Education;Languages;Dictionary;

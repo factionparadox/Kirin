@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Russian Course Library
+Name[ru]=Библиотека курсов русского языка
+Comment=DLI, FSI and Peace Corps Russian textbooks and audio
+Comment[ru]=Учебники и аудио курсов DLI, FSI и Корпуса мира
+Exec=kirin-learn library --open
+Icon=folder-documents
+Terminal=false
+Categories=Education;Languages;

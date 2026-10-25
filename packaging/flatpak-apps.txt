@@ -2,3 +2,5 @@
 # Include their required runtimes, exports and verified application content.
 io.github.flattool.Warehouse
 com.github.tchx84.Flatseal
+# Offline reader for the bundled Wiktionary (Russian learning; docs/RUSSIAN.md).
+org.kiwix.desktop

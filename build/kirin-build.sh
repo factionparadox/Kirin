@@ -14,6 +14,16 @@ HERE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 REPO=$(cd -- "$HERE/.." && pwd)
 STAGES=(preflight verify extract inventory payloads customise audit pack)
 QWEN_TAG='qwen2.5-coder:7b-instruct'
+# Russian learning (docs/RUSSIAN.md). A mixture-of-experts model: 30B parameters,
+# about 3B active per token, so it answers quickly on a CPU with 32 GB of RAM.
+TUTOR_TAG='qwen3:30b-a3b-instruct-2507-q4_K_M'
+PIPER_VERSION='2023.11.14-2'
+PIPER_SHA256=${KIRIN_TEST_PIPER_SHA256:-a50cb45f355b7af1f6d758c1b360717877ba0a398cc8cbe6d2a7a3a26e225992}
+KIWIX_INDEX=${KIRIN_TEST_KIWIX_INDEX:-https://download.kiwix.org/zim/wiktionary/}
+KIWIX_PREFIX='wiktionary_en_all_nopic_'
+RUSSIAN_DIR=/opt/kirin/russian
+VOICES_TSV=${KIRIN_TEST_VOICES_TSV:-$REPO/packaging/russian/voices.tsv}
+LIBRARY_TSV=${KIRIN_TEST_LIBRARY_TSV:-$REPO/packaging/russian/library.tsv}
 OLLAMA_VERSION_DEFAULT='v0.40.11'
 # Kirin compatibility build of libfyaml0 (see build/chroot-steps.sh compat_libfyaml).
 FYAML_VERSION='0.9.6'
@@ -21,7 +31,7 @@ FYAML_SHA256=${KIRIN_TEST_FYAML_SHA256:-a59cc3331e2eb903ec36933ad52a45888041cac3
 MIN_FREE_GB=${KIRIN_MIN_FREE_GB:-70}
 
 ISO='' ISO_SHA256='' WORK="$PWD/work" OUT="$PWD/out" SQUASHFS_REL=''
-MODEL_INVENTORY='' ACCEPT_INVENTORY=0 TEST_BUILD=0 FROM='' ONLY=''
+MODEL_INVENTORY='' ACCEPT_INVENTORY=0 TEST_BUILD=0 FROM='' ONLY='' NO_RUSSIAN=0 KIWIX_NAME=''
 OLLAMA_VERSION=$OLLAMA_VERSION_DEFAULT
 ALLOW_REMOVAL=()
 
@@ -45,6 +55,8 @@ Options:
   --out DIR               Output directory (default: ./out)
   --squashfs PATH         Root filesystem squashfs inside the ISO, if detection is ambiguous
   --ollama-version TAG    Ollama release tag (default: $OLLAMA_VERSION_DEFAULT)
+  --no-russian            Leave out the Russian tutor model, voices, course library and dictionary
+  --kiwix-name FILE       Pin the Wiktionary ZIM (e.g. ${KIWIX_PREFIX}2026-09.zim) instead of the newest
   --test-build            Produce an ISO even if policy audits fail; named TEST-UNVERIFIED.
                           The AI-model contract is never relaxed.
   --from STAGE            Re-run from STAGE onwards
@@ -65,6 +77,8 @@ while [ $# -gt 0 ]; do
     --allow-removal) ALLOW_REMOVAL+=("$2"); shift 2 ;;
     --ollama-version) OLLAMA_VERSION=$2; shift 2 ;;
     --test-build) TEST_BUILD=1; shift ;;
+    --no-russian) NO_RUSSIAN=1; shift ;;
+    --kiwix-name) KIWIX_NAME=$2; shift 2 ;;
     --from) FROM=$2; shift 2 ;;
     --only) ONLY=$2; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -177,8 +191,10 @@ stage_preflight() {
   need python3 'apt install python3'
   need sha256sum coreutils; need chroot coreutils; need realpath coreutils
   python3 -c 'import sys; sys.exit(sys.version_info < (3, 11))' || die 'python3 3.11 or newer is required'
-  local free_gb; free_gb=$(df --output=avail -BG "$WORK" | tail -1 | tr -dc 0-9)
-  [ "$free_gb" -ge "$MIN_FREE_GB" ] || die "need ${MIN_FREE_GB} GB free under $WORK, have ${free_gb} GB"
+  local free_gb need=$MIN_FREE_GB; free_gb=$(df --output=avail -BG "$WORK" | tail -1 | tr -dc 0-9)
+  # The Russian kit adds a 19 GB model and a multi-GB dictionary, held in payloads, rootfs and squashfs.
+  [ "$NO_RUSSIAN" -eq 1 ] || [ -n "${KIRIN_MIN_FREE_GB:-}" ] || need=150
+  [ "$free_gb" -ge "$need" ] || die "need ${need} GB free under $WORK, have ${free_gb} GB"
   info "host ok; ${free_gb} GB free in $WORK"
 }
 
@@ -300,14 +316,17 @@ fetch_ollama() {
   info "Ollama $OLLAMA_VERSION verified"
 }
 
-pull_qwen() {
-  local models="$PAYLOADS/models" index="$PAYLOADS/qwen-blobs.json"
+# pull_model TAG INDEX-FILE DESCRIPTION
+pull_model() {
+  local tag=$1 index=$2 about=$3 models="$PAYLOADS/models"
   local bin="$PAYLOADS/ollama-$OLLAMA_VERSION/root/bin/ollama"
-  if [ -f "$index" ] && python3 "$REPO/scripts/build/qwen-index.py" --models "$models" --out "$index.check" >/dev/null 2>&1; then
-    rm -f "$index.check"; info "$QWEN_TAG already present and verified"; return
+  # Already downloaded? Re-verify every blob and (re)write the index from what is there.
+  if python3 "$REPO/scripts/build/qwen-index.py" --models "$models" --tag "$tag" --out "$index.check" >/dev/null 2>&1; then
+    mv -f "$index.check" "$index"; info "$tag already present and verified"; return
   fi
+  rm -f "$index.check"
   mkdir -p "$models"
-  info "pulling $QWEN_TAG (about 4.7 GB)"
+  info "pulling $tag ($about)"
   OLLAMA_MODELS="$models" OLLAMA_HOST=127.0.0.1:11435 "$bin" serve >"$PAYLOADS/ollama-serve.log" 2>&1 &
   OLLAMA_PID=$!
   local i
@@ -316,10 +335,50 @@ pull_qwen() {
     kill -0 "$OLLAMA_PID" 2>/dev/null || die "ollama serve exited; see $PAYLOADS/ollama-serve.log"
     sleep 1
   done
-  OLLAMA_HOST=127.0.0.1:11435 "$bin" pull "$QWEN_TAG"
+  OLLAMA_HOST=127.0.0.1:11435 "$bin" pull "$tag"
   kill "$OLLAMA_PID"; wait "$OLLAMA_PID" 2>/dev/null || true; OLLAMA_PID=''
-  python3 "$REPO/scripts/build/qwen-index.py" --models "$models" --tag "$QWEN_TAG" --out "$index"
+  python3 "$REPO/scripts/build/qwen-index.py" --models "$models" --tag "$tag" --out "$index"
 }
+
+pull_qwen() { pull_model "$QWEN_TAG" "$PAYLOADS/qwen-blobs.json" 'about 4.7 GB'; }
+
+fetch_piper() {
+  local dir="$PAYLOADS/piper-$PIPER_VERSION" tarball
+  tarball="$dir/piper_linux_x86_64.tar.gz"
+  if [ -x "$dir/root/piper/piper" ]; then info "Piper $PIPER_VERSION already unpacked"; return; fi
+  mkdir -p "$dir"
+  if [ ! -f "$tarball" ] || [ "$(sha256sum "$tarball" | cut -d' ' -f1)" != "$PIPER_SHA256" ]; then
+    curl -fsSL "https://github.com/rhasspy/piper/releases/download/$PIPER_VERSION/piper_linux_x86_64.tar.gz" -o "$tarball"
+  fi
+  [ "$(sha256sum "$tarball" | cut -d' ' -f1)" = "$PIPER_SHA256" ] || die "Piper $PIPER_VERSION checksum mismatch"
+  rm -rf "$dir/root"; mkdir -p "$dir/root"
+  tar -xzf "$tarball" -C "$dir/root"
+  [ -x "$dir/root/piper/piper" ] || die 'Piper archive did not contain piper/piper'
+  info "Piper $PIPER_VERSION verified"
+}
+
+fetch_russian() {
+  [ "$NO_RUSSIAN" -eq 0 ] || { info 'Russian extras skipped (--no-russian)'; return; }
+  local r="$PAYLOADS/russian"
+  mkdir -p "$r"
+  pull_model "$TUTOR_TAG" "$PAYLOADS/tutor-blobs.json" 'about 19 GB'
+  fetch_piper
+  info 'fetching Piper Russian voices'
+  python3 "$REPO/scripts/build/fetch-files.py" --manifest "$VOICES_TSV" \
+      --dest "$r/voices" --lock "$r/voices.lock.json" --required |& sed 's/^/    /' ||
+    die 'could not fetch the Piper Russian voices'
+  info 'fetching the Russian course library (DLI, FSI, Peace Corps)'
+  python3 "$REPO/scripts/build/fetch-files.py" --manifest "$LIBRARY_TSV" \
+      --dest "$r/library" --lock "$r/library.lock.json" |& sed 's/^/    /' ||
+    die 'the course library manifest could not be processed'
+  info 'fetching the English Wiktionary for Kiwix (several GB)'
+  local zim
+  zim=$(python3 "$REPO/scripts/build/fetch-kiwix.py" --index "$KIWIX_INDEX" --prefix "$KIWIX_PREFIX" \
+        --dest "$r/dictionary" ${KIWIX_NAME:+--name "$KIWIX_NAME"}) || die 'could not fetch the Wiktionary ZIM'
+  printf '%s\n' "$zim" > "$r/dictionary.name"
+  info "dictionary: $zim (checksum verified)"
+}
+
 
 fetch_libfyaml() {
   local tarball="$PAYLOADS/libfyaml-$FYAML_VERSION.tar.gz"
@@ -332,10 +391,49 @@ fetch_libfyaml() {
 }
 
 stage_payloads() {
-  log 'Fetching payloads: Ollama runtime, Qwen2.5-Coder 7B and compatibility sources'
+  log 'Fetching payloads: Ollama, the AI models, Russian learning material and compatibility sources'
   fetch_ollama
   pull_qwen
   fetch_libfyaml
+  fetch_russian
+}
+
+install_russian() {
+  [ "$NO_RUSSIAN" -eq 0 ] || return 0
+  local r="$PAYLOADS/russian" dest="$ROOTFS$RUSSIAN_DIR"
+  info 'installing Russian learning material'
+  rm -rf "$dest" "$ROOTFS/opt/kirin/piper"
+  mkdir -p "$dest" "$ROOTFS/opt/kirin"
+  cp -a "$PAYLOADS/piper-$PIPER_VERSION/root/piper" "$ROOTFS/opt/kirin/piper"
+  local part
+  for part in voices library dictionary; do
+    cp -al "$r/$part" "$dest/$part" 2>/dev/null || cp -a "$r/$part" "$dest/$part"
+  done
+  find "$dest" -name '*.part' -delete
+  install -m 0644 "$PAYLOADS/tutor-blobs.json" "$ROOTFS/usr/share/kirin/tutor-blobs.json"
+  python3 - "$ROOTFS/usr/share/kirin/russian.json" "$TUTOR_TAG" "$RUSSIAN_DIR" "$(cat "$r/dictionary.name")" <<'PY'
+import json, sys
+out, model, root, zim = sys.argv[1:]
+json.dump({'model': model, 'root': root, 'piper': '/opt/kirin/piper/piper',
+           'voices': root + '/voices', 'library': root + '/library',
+           'dictionary': f'{root}/dictionary/{zim}'}, open(out, 'w'), indent=2)
+PY
+}
+
+audit_russian() {
+  if [ "$NO_RUSSIAN" -eq 1 ]; then echo 'skipped (--no-russian)'; return 0; fi
+  local dest="$ROOTFS$RUSSIAN_DIR" ok=0
+  python3 "$REPO/scripts/build/qwen-index.py" --models "$ROOTFS/usr/share/ollama/.ollama/models" \
+      --tag "$TUTOR_TAG" --out "$WORK/tutor-blobs.check" || ok=1
+  [ -x "$ROOTFS/opt/kirin/piper/piper" ] || { echo 'Piper missing'; ok=1; }
+  (cd "$dest/voices" && sha256sum --quiet -c SHA256SUMS) || ok=1
+  [ "$(grep -c '\.onnx$' "$dest/voices/SHA256SUMS")" -eq 4 ] || { echo 'expected four Russian voices'; ok=1; }
+  # The course library is optional (its sources may move); verify whatever was fetched.
+  if [ -s "$dest/library/SHA256SUMS" ]; then (cd "$dest/library" && sha256sum --quiet -c SHA256SUMS) || ok=1; fi
+  echo "library: $(wc -l < "$dest/library/SHA256SUMS") files"
+  ls "$dest/dictionary/"*.zim >/dev/null 2>&1 || { echo 'Wiktionary ZIM missing'; ok=1; }
+  [ -f "$ROOTFS/usr/share/kirin/russian.json" ] || { echo 'russian.json missing'; ok=1; }
+  return "$ok"
 }
 
 purge_reviewed() {
@@ -359,6 +457,7 @@ stage_customise() {
   [ -f "$PAYLOADS/qwen-blobs.json" ] || die 'run the payloads stage first'
   # Payloads added after a first run (e.g. the libfyaml source) are fetched here.
   [ -f "$PAYLOADS/libfyaml-$FYAML_VERSION.tar.gz" ] || fetch_libfyaml
+  [ "$NO_RUSSIAN" -eq 1 ] || [ -f "$PAYLOADS/russian/dictionary.name" ] || fetch_russian
   local olroot="$PAYLOADS/ollama-$OLLAMA_VERSION/root"
 
   # Language policy first, so dpkg path-exclusions apply to packages installed next.
@@ -369,7 +468,7 @@ stage_customise() {
   mount_chroot
   info 'installing base packages'; in_chroot install
   info 'removing Token Centre and Software Store'; purge_reviewed
-  info 'installing Warehouse and Flatseal system-wide'; in_chroot flatpak
+  info 'installing Warehouse, Flatseal and Kiwix system-wide'; in_chroot flatpak "$RUSSIAN_DIR"
 
   info 'installing Ollama and the coding model'
   install -d -m 0755 "$ROOTFS/usr/local/bin" "$ROOTFS/usr/local/lib"
@@ -382,6 +481,8 @@ stage_customise() {
   cp -al "$PAYLOADS/models/." "$dest/" 2>/dev/null || cp -a "$PAYLOADS/models/." "$dest/"
   install -D -m 0644 "$PAYLOADS/qwen-blobs.json" "$ROOTFS/usr/share/kirin/qwen-blobs.json"
   install -D -m 0644 "$UPSTREAM/upstream-models.json" "$ROOTFS/usr/share/kirin/upstream-models.json"
+
+  install_russian
 
   info 'installing Kirin Learn'
   DESTDIR="$ROOTFS" sh "$REPO/scripts/install-education.sh"
@@ -415,6 +516,7 @@ stage_audit() {
   run_audit software python3 "$REPO/scripts/audit-software-image.py" --root "$ROOTFS"
   run_audit language python3 "$REPO/scripts/kirin-localise.py" --root "$ROOTFS" --audit
   run_audit accounts python3 "$REPO/scripts/audit-online-accounts.py" --root "$ROOTFS"
+  run_audit russian audit_russian
   grep -q '^FAIL ai-payload' "$summary" && die 'AI payload contract failed; this is never waived'
   if [ "$failed" -eq 1 ] && [ "$TEST_BUILD" -ne 1 ]; then
     die 'policy audits failed; fix them, or pass --test-build for an unverified test image'

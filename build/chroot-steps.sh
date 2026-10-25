@@ -124,6 +124,10 @@ case "$step" in
     # shellcheck disable=SC2046
     # --reinstall keeps this idempotent and re-runs Flatpak's export triggers.
     flatpak install --system -y --noninteractive --reinstall flathub $(list /kirin-build/flatpak-apps.txt)
+    # Let Kiwix read the bundled dictionary ($1 = Russian material directory).
+    if [ -n "${1:-}" ] && list /kirin-build/flatpak-apps.txt | grep -qx org.kiwix.desktop; then
+      flatpak override --system --filesystem="$1:ro" org.kiwix.desktop
+    fi
     ;;
   finish)
     # openKylin's locales package is Ubuntu-style: locale-gen reads

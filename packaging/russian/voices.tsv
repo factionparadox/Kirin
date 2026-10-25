@@ -1,0 +1,11 @@
+# Piper Russian voices (MIT, https://huggingface.co/rhasspy/piper-voices).
+# Required: the build fails if any voice cannot be fetched. Pinned on first download.
+# destination (under /opt/kirin/russian/voices)<TAB>URL
+ru_RU-irina-medium.onnx	https://huggingface.co/rhasspy/piper-voices/resolve/main/ru/ru_RU/irina/medium/ru_RU-irina-medium.onnx
+ru_RU-irina-medium.onnx.json	https://huggingface.co/rhasspy/piper-voices/resolve/main/ru/ru_RU/irina/medium/ru_RU-irina-medium.onnx.json
+ru_RU-denis-medium.onnx	https://huggingface.co/rhasspy/piper-voices/resolve/main/ru/ru_RU/denis/medium/ru_RU-denis-medium.onnx
+ru_RU-denis-medium.onnx.json	https://huggingface.co/rhasspy/piper-voices/resolve/main/ru/ru_RU/denis/medium/ru_RU-denis-medium.onnx.json
+ru_RU-dmitri-medium.onnx	https://huggingface.co/rhasspy/piper-voices/resolve/main/ru/ru_RU/dmitri/medium/ru_RU-dmitri-medium.onnx
+ru_RU-dmitri-medium.onnx.json	https://huggingface.co/rhasspy/piper-voices/resolve/main/ru/ru_RU/dmitri/medium/ru_RU-dmitri-medium.onnx.json
+ru_RU-ruslan-medium.onnx	https://huggingface.co/rhasspy/piper-voices/resolve/main/ru/ru_RU/ruslan/medium/ru_RU-ruslan-medium.onnx
+ru_RU-ruslan-medium.onnx.json	https://huggingface.co/rhasspy/piper-voices/resolve/main/ru/ru_RU/ruslan/medium/ru_RU-ruslan-medium.onnx.json

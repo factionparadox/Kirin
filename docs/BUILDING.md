@@ -7,7 +7,7 @@ This is the first build stage. The resulting ISO boots and installs with openKyl
 ## Build host
 
 - x86-64 Linux, run as root. **WSL2 works** on Windows if its virtual disk has room; Docker or another container needs `--privileged` for the bind mounts and chroot.
-- At least **70 GB free** in the work directory. The upstream ISO, its unpacked tree, the unpacked root, the 4.7 GB coding model and the new squashfs all coexist.
+- At least **70 GB free** in the work directory, or about **150 GB** with the Russian learning kit. The upstream ISO, its unpacked tree, the unpacked root, the 4.7 GB coding model and the new squashfs all coexist.
 - Python 3.11 or newer, `xorriso`, `squashfs-tools`, `curl` and `zstd`. On Debian or Ubuntu, install them with `apt install xorriso squashfs-tools curl zstd python3`.
 - Internet access to openKylin's package mirrors (used by APT inside the image), `dl.flathub.org`, `github.com` (for the Ollama release) and `registry.ollama.ai` (for the model).
 
@@ -44,7 +44,7 @@ The build resumes where it stopped. Completed stages are skipped. `--from STAGE`
 | verify | Records the ISO's SHA-256, size and volume ID, and checks the hash if you passed `--iso-sha256` |
 | extract | Unpacks the ISO tree and finds the root-filesystem squashfs (pass `--squashfs` if this is ambiguous), then unpacks it. openKylin 3.0's squashfs is about 7.5 GB, and the ISO records its size wrapped at 4 GiB, so extraction cuts it short; the build detects this and copies the full file straight out of the ISO (`scripts/build/recover-squashfs.py`), proving the copy matches what was already extracted |
 | inventory | Lists candidate AI model files with hashes and owning packages, proves the list matches the untouched image, then **stops for review** |
-| payloads | Downloads Ollama from its GitHub release and checks it against the release's `sha256sum.txt`; pulls `qwen2.5-coder:7b-instruct` and verifies every blob against its manifest |
+| payloads | Downloads Ollama from its GitHub release and checks it against the release's `sha256sum.txt`; pulls `qwen2.5-coder:7b-instruct` and the Russian tutor `qwen3:30b-a3b-instruct-2507-q4_K_M`, verifying every blob; fetches Piper, the Russian voices, the course library and the Wiktionary ZIM ([RUSSIAN.md](RUSSIAN.md); skip with `--no-russian`) |
 | customise | Applies the language policy and APT pin; installs the base packages; purges the Token Centre and Software Store; installs Warehouse and Flatseal system-wide from Flathub; installs Ollama, its service and the model; installs Kirin Learn; generates `en_GB` and `ru_RU` locales |
 | audit | Runs the AI-payload contract, software, language and accounts audits |
 | pack | Rebuilds the squashfs with the original compression and replaces it in the upstream ISO. The original BIOS/UEFI boot records are replayed, and `filesystem.size`, `filesystem.manifest` and `md5sum.txt` are updated if present |

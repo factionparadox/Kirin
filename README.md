@@ -24,6 +24,7 @@ Inspired by [Archon/Cognoscenti](https://github.com/factionparadox/Archon), Kiri
 | AI | Preserve every existing upstream model; add offline Ollama + Qwen2.5-Coder 7B Instruct |
 | Web apps | Planned Web App Studio for ChatGPT, Claude and arbitrary websites |
 | Learning | Kirin Learn, offline lessons, Vim, Neovim and native tutors |
+| Russian study | Local AI tutor (Qwen3 30B), Piper Russian voices, public-domain DLI/FSI/Peace Corps courses, offline Wiktionary ([Russian learning kit](docs/RUSSIAN.md)) |
 | Language | British English (en_GB.UTF-8) default; Russian (ru_RU.UTF-8) supported |
 | Accounts | Local Linux accounts only; no mandatory Kylin ID, token centre, cloud sync or device registration |
 | Init and security | systemd retained, with downstream birthDate field removal required; no SELinux requirement |

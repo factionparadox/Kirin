@@ -23,7 +23,9 @@ open(sys.argv[2], 'wb').write(sq)
 open(sys.argv[1], 'wb').write(os.urandom(40 * 2048) + sq + os.urandom(7000))
 EOF
 sha=$(sha256sum "$T/upstream.iso" | cut -d' ' -f1)
-run() { "$REPO/build/kirin-build.sh" --iso "$T/upstream.iso" --iso-sha256 "$sha" --work "$T/work" --out "$T/out" "$@"; }
+ZIM=wiktionary_en_all_nopic_2026-09.zim
+run() { "$REPO/build/kirin-build.sh" --iso "$T/upstream.iso" --iso-sha256 "$sha" --work "$T/work" --out "$T/out" \
+          --kiwix-name "$ZIM" "$@"; }
 
 # Pre-seed payloads so no network is needed: fake Ollama and a sparse >4 GB model.
 P="$T/work/payloads"; ver=v0.40.11
@@ -37,6 +39,26 @@ cat > "$P/models/manifests/registry.ollama.ai/library/qwen2.5-coder/7b-instruct"
 EOF
 python3 "$REPO/scripts/build/qwen-index.py" --models "$P/models" --out "$P/qwen-blobs.json" >/dev/null
 printf 'fake libfyaml source' > "$P/libfyaml-0.9.6.tar.gz"
+
+# Russian extras, served from local files instead of the internet.
+tag_dir="$P/models/manifests/registry.ollama.ai/library/qwen3"; mkdir -p "$tag_dir"
+printf 'tutor weights' > "$T/tw"; tsha=$(sha256sum "$T/tw" | cut -d' ' -f1); mv "$T/tw" "$P/models/blobs/sha256-$tsha"
+printf '{"layers":[{"digest":"sha256:%s","size":13}]}' "$tsha" > "$tag_dir/30b-a3b-instruct-2507-q4_K_M"
+mkdir -p "$P/piper-2023.11.14-2/root/piper"
+printf '#!/bin/sh\n' > "$P/piper-2023.11.14-2/root/piper/piper"; chmod +x "$P/piper-2023.11.14-2/root/piper/piper"
+SITE="$T/site"; mkdir -p "$SITE"
+: > "$T/voices.tsv"
+for v in irina denis dmitri ruslan; do
+  for ext in onnx onnx.json; do
+    printf 'voice %s %s' "$v" "$ext" > "$SITE/ru_RU-$v-medium.$ext"
+    printf 'ru_RU-%s-medium.%s\tfile://%s/ru_RU-%s-medium.%s\n' "$v" "$ext" "$SITE" "$v" "$ext" >> "$T/voices.tsv"
+  done
+done
+printf 'textbook' > "$SITE/book.pdf"
+printf 'DLI Russian Basic Course/Mod 01.pdf\tfile://%s/book.pdf\nDLI Russian Basic Course/Gone.pdf\tfile://%s/missing.pdf\n' \
+  "$SITE" "$SITE" > "$T/library.tsv"
+printf 'dictionary' > "$SITE/$ZIM"; printf '%s  %s\n' "$(sha256sum "$SITE/$ZIM" | cut -d' ' -f1)" "$ZIM" > "$SITE/$ZIM.sha256"
+export KIRIN_TEST_VOICES_TSV="$T/voices.tsv" KIRIN_TEST_LIBRARY_TSV="$T/library.tsv" KIRIN_TEST_KIWIX_INDEX="file://$SITE/"
 export KIRIN_TEST_FYAML_SHA256; KIRIN_TEST_FYAML_SHA256=$(sha256sum "$P/libfyaml-0.9.6.tar.gz" | cut -d' ' -f1)
 
 echo '--- 1. wrong checksum is refused'
@@ -79,6 +101,14 @@ R="$T/work/rootfs"
 [ -x "$R/usr/local/bin/ollama" ] && [ -f "$R/etc/systemd/system/ollama.service" ] && [ -x "$R/usr/bin/kirin-learn" ] ||
   fail 'payloads not installed'
 grep -q 'Package: openkylin-token-center' "$R/var/lib/dpkg/status" && fail 'token centre still installed'
+RU="$R/opt/kirin/russian"
+[ -x "$R/opt/kirin/piper/piper" ] && [ "$(ls "$RU"/voices/*.onnx | wc -l)" -eq 4 ] || fail 'Piper or voices missing'
+[ -f "$RU/library/DLI Russian Basic Course/Mod 01.pdf" ] && [ ! -e "$RU/library/DLI Russian Basic Course/Gone.pdf" ] ||
+  fail 'library not installed (or a missing book was not skipped)'
+[ -f "$RU/dictionary/$ZIM" ] || fail 'dictionary not installed'
+python3 -c 'import json,sys; c=json.load(open(sys.argv[1])); assert c["model"].startswith("qwen3:30b"), c' \
+  "$R/usr/share/kirin/russian.json" || fail 'russian.json wrong'
+grep -q 'PASS russian' "$T/work/audit/summary" || fail 'russian audit did not pass'
 
 echo '--- 5. a policy failure blocks release but allows a labelled test build'
 printf 'Name[zh_CN]=Files-zh\n' >> "$R/usr/share/applications/files.desktop"

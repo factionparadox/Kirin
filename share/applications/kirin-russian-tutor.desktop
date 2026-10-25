@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Russian Tutor
+Name[ru]=Репетитор русского языка
+Comment=Practise Russian with a local AI tutor
+Comment[ru]=Практика русского языка с локальным ИИ-репетитором
+Exec=kirin-learn russian
+Icon=accessories-dictionary
+Terminal=true
+Categories=Education;Languages;
