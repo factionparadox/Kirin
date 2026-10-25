@@ -5,3 +5,4 @@ neovim
 man-db
 manpages
 python3
+flatpak

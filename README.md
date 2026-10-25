@@ -1,50 +1,107 @@
 # Kirin Linux
 
-**Status: source-stage project; not a bootable operating-system image.**
+**An educational, mutable Linux desktop with local AI, recoverable system management and practical software tools.**
 
-Kirin is an educational, mutable Linux distribution project based on **openKylin 3.0** and UKUI. Its goals are OpenZFS with ZFSBootMenu boot environments, graphical ZFS management, an integrated APT ecosystem, desktop web applications, a separate coding assistant and offline-first Linux education.
+**Status: source-stage project.** Kirin is not yet a bootable or verified installation image. The features below are release goals unless explicitly marked as existing source code.
 
-## Preserve upstream AI and add coding
+## Why Kirin exists
 
-Keep **all AI models and functions shipped with openKylin**. Kirin adds Ollama with **Qwen2.5-Coder 7B Instruct** (`qwen2.5-coder:7b-instruct`) as a *second*, dedicated coding model. Its complete model payload must be present in the offline installation image; downloading it after installation is not acceptable. Upstream general-assistant models keep their original interfaces. No upstream AI payloads are removed by the source in this repository.
+Kirin is based on **openKylin 3.0 (Huanghe)** and **UKUI 4.24**. It retains an approachable desktop and openKylin's existing offline AI capabilities, while adding Linux education, a dedicated coding model, OpenZFS-based system recovery, and straightforward software administration.
 
-`scripts/check-image-contract.py` is intended to reject a candidate image if files in its explicit upstream AI inventory differ or Qwen's full declared model blobs are absent/incorrect. It is a staging check, not proof of a bootable ISO.
+Inspired by [Archon/Cognoscenti](https://github.com/factionparadox/Archon), Kirin aims to **teach the user how the operating system works**. Lessons, command explanations, manual pages and read-only system inspection must work offline and without an account or AI. Users retain the ability to modify the system; snapshots and boot environments are intended to help recover from mistakes.
+
+## Distribution specification
+
+| Component | Kirin design |
+| --- | --- |
+| Foundation | openKylin 3.0 Huanghe, initially x86-64 |
+| Desktop | UKUI 4.24 |
+| Filesystem | OpenZFS root, independent persistent user datasets |
+| Boot and recovery | ZFSBootMenu, snapshots, cloned boot environments, graphical ZFS administration |
+| Native software | APT/dpkg, planned MX Package Installer port and Synaptic |
+| Flatpak software | Flatpak and Flathub, **Warehouse** and **Flatseal** preinstalled |
+| Replaced | openKylin Software Store (not the OS updater or APT/dpkg) |
+| AI | Preserve every existing upstream model; add offline Ollama + Qwen2.5-Coder 7B Instruct |
+| Web apps | Planned Web App Studio for ChatGPT, Claude and arbitrary websites |
+| Learning | Kirin Learn, offline lessons, Vim, Neovim and native tutors |
+| Language | British English (en_GB.UTF-8) default; Russian (ru_RU.UTF-8) supported |
+| Accounts | Local Linux accounts only; no mandatory Kylin ID, token centre, cloud sync or device registration |
+| Init and security | systemd retained, with downstream birthDate field removal required; no SELinux requirement |
+
+## Software without an app store
+
+Kirin will **remove openKylin's Software Store** from its target image. It will be replaced with a dedicated Flatpak administration stack:
+
+- **[Warehouse](https://github.com/flattool/warehouse)** — Flatpak ID io.github.flattool.Warehouse. Install and remove applications, manage remotes, inspect packages, clean application data and switch to available previous versions.
+- **[Flatseal](https://github.com/tchx84/Flatseal)** — Flatpak ID com.github.tchx84.Flatseal. Inspect and manage Flatpak sandbox permissions.
+
+The Flatpak runtime, both applications, their required runtimes and desktop launchers must be **included in the installation image**. Kirin must not require a first-boot download merely to open its Flatpak manager. Flathub is the intended default remote; users may add or remove others.
+
+**APT remains first-class** for the OS, developer tools and native applications. Kirin's planned MX Package Installer port provides graphical APT management, with Synaptic for advanced package tasks. openKylin's repositories remain authoritative. Additional Debian, Ubuntu and MX sources are opt-in, authenticated and package-specific: broad cross-distribution upgrades must not replace the base's libraries unchecked.
+
+We will **keep operating-system update capability** when removing the Software Store. The installed binary package names and dependencies must be verified against the actual 3.0 ISO before any purge. See [Software management and replacement plan](docs/SOFTWARE.md).
+
+## Local AI and Web App Studio
+
+**Do not remove or replace openKylin's existing AI models.** Preserve their offline functions and payloads. Kirin adds **Ollama with Qwen2.5-Coder 7B Instruct** as an additional, dedicated coding assistant. Its complete model files must already be on the ISO, usable without a first-boot download. See [offline model validation](docs/IMAGE-BUILD.md).
+
+Web App Studio is planned to create UKUI launchers for ChatGPT, Claude and other user-chosen services, with isolated browser profiles. Website logins are entirely separate from Kirin's local operating-system accounts.
 
 ## Kirin Learn
 
-Adapts the learn/explain/doctor educational design from [Archon/Cognoscenti](https://github.com/factionparadox/Archon) to openKylin, APT, systemd and OpenZFS.
+The repository currently has an offline lesson library, a Python teaching CLI, desktop launchers and a Neovim tutor. Vim and Neovim are mandatory base-image packages. Learning is possible without AI, a subscription or internet access.
 
-- `kirin-learn browse` — offline interactive lesson browser
-- `kirin-learn topics` and `kirin-learn learn packages` — read local lessons
-- `kirin-learn explain 'apt update'` — vetted explanation, never command execution
-- `kirin-learn doctor` — read-only executable inventory
-- `kirin-learn tutor vim` — native `vimtutor`
-- `kirin-learn tutor neovim` — Neovim's custom `:Tutor kirin-01-basics`
-- `kirin-learn ask-code 'Explain this function'` — optional local Ollama coding assistance
+~~~sh
+kirin-learn browse
+kirin-learn learn packages
+kirin-learn explain 'apt update'
+kirin-learn doctor
+kirin-learn tutor vim
+kirin-learn tutor neovim
+kirin-learn ask-code 'Explain ZFS datasets'
+~~~
 
-**Vim, Neovim and their tutorials are mandatory base-image packages** (see `packaging/base-packages.txt`). The education CLI, tutor file and desktop launchers are shipped in this repository. The learning material remains usable with no AI, account or internet.
+Lessons explain commands without executing them; system inspection is read-only. A graphical UKUI help centre is planned. See [education goals](docs/EDUCATION.md).
 
-## Source verification and staging
+## Recovery and storage
 
-```sh
+Kirin is intended to install onto OpenZFS, boot using ZFSBootMenu and make root boot environments, snapshots and dataset administration accessible from UKUI. Package updates should be able to create recovery environments before system changes. Personal files should be stored separately from the switchable root environments.
+
+The required ZFS kernel and userspace integration, root installer, boot-environment activation and rollback, upgrade transaction safety and hardware testing **remain outstanding**.
+
+## Localisation, accounts and systemd
+
+Kirin targets **British English** as its default and **Russian** as its second supported language. Chinese language packs, menu translations and regional defaults are to be excluded from the image, while preserving Unicode rendering, libraries, fonts and every upstream AI model. UKUI translation completeness needs actual image-level verification. [Languages](docs/LANGUAGES.md).
+
+No openKylin ID, Token Centre, required vendor login, cloud settings sync or device-binding. Keep local user accounts, PAM, polkit and normal UKUI settings. [Accounts](docs/ACCOUNTS.md).
+
+Systemd stays, but Kirin's downstream build must remove the optional birthDate user-record feature rather than merely freezing an arbitrary systemd version. [Systemd policy](docs/SYSTEMD-POLICY.md).
+
+## Implementation status
+
+| Present in this source repository | Still to build and test |
+| --- | --- |
+| Offline lessons, Kirin Learn CLI, editor tutoring and launchers | Installed and tested UKUI educational desktop |
+| Offline AI-file integrity checking | Real model payloads embedded and functioning |
+| Language policy and vendor-account audits | Translated, account-free openKylin image |
+| Store-removal and Flatpak integration specification; image-inventory audit | Actual store removal, Warehouse/Flatseal offline integration and runtime tests |
+| Design and package manifests | OpenZFS-root ISO, boot environments, ZFS GUI, Web App Studio and MX GUI APT port |
+
+**No finished ISO, verified graphical package manager, or ZFS-root boot is claimed.** A release requires a genuine openKylin build root, offline installation testing and checks on disposable drives or virtual machines.
+
+## Source-stage checks
+
+~~~sh
 python3 -m unittest discover -s tests -v
 DESTDIR="$(mktemp -d)" sh scripts/install-education.sh
-```
+# Once a candidate image has been unpacked into an OFFLINE staging root:
+python3 scripts/audit-software-image.py --root /path/to/staged-root
+python3 scripts/kirin-localise.py --root /path/to/staged-root --audit
+python3 scripts/audit-online-accounts.py --root /path/to/staged-root
+~~~
 
-The staging installer writes only inside `DESTDIR`; it does not run APT, change the host or build an ISO.
+These checks inspect selected image contracts; they do not build or boot an ISO.
 
-## Not yet complete
+## Upstream credit
 
-This repository does **not** yet provide an integrated, installable openKylin ISO, native ZFS-root boot, GTK/Qt graphical ZFS controls, MX GUI port, or verified image containing the full Qwen model and all original openKylin AI files. These require an openKylin build environment and boot tests.
-
-Systemd's `birthDate` exclusion is a downstream source patch requirement, **not** merely a version hold: see `docs/SYSTEMD-POLICY.md`.
-
-Primary upstream references: [openKylin](https://www.openkylin.top/), [ZFSBootMenu](https://docs.zfsbootmenu.org/), [Neovim Tutor](https://neovim.io/doc/user/pi_tutor/), [Qwen2.5-Coder](https://ollama.com/library/qwen2.5-coder:7b-instruct).
-
-## Languages
-
-Kirin's default is **British English (en_GB.UTF-8)** with **Russian (ru_RU.UTF-8)** as the second supported language. The offline image build excludes Chinese-language UI catalogues and menu translations while retaining all upstream AI model files, functional code and Unicode fonts. See [language policy](docs/LANGUAGES.md) and run the source-stage localisation/audit tool before ISO creation. Full UKUI translation still requires image-level testing.
-
-## No vendor account required
-
-Kirin removes openKylin ID, cloud settings sync, token check-ins and device binding from its target release; normal **local user accounts** and system authentication stay. Token Centre's package is `openkylin-token-center`. This source tree now includes a build-time offline [account integration audit](scripts/audit-online-accounts.py), an APT negative-priority pin and [account removal policy](docs/ACCOUNTS.md). The policy is not a claim that these components have already been removed from a functioning ISO: building and testing that image remain outstanding.
+Kirin builds on [openKylin](https://www.openkylin.top/), [UKUI](https://www.ukui.org/), [OpenZFS](https://openzfs.github.io/openzfs-docs/), [ZFSBootMenu](https://docs.zfsbootmenu.org/), [Flatpak](https://docs.flatpak.org/), [Warehouse](https://github.com/flattool/warehouse), [Flatseal](https://github.com/tchx84/Flatseal), [Neovim](https://neovim.io/) and [Ollama](https://ollama.com/). Preserve applicable upstream licences and attribution.

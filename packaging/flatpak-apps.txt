@@ -1,0 +1,4 @@
+# Required Flatpak applications to stage system-wide into the offline installation image.
+# Include their required runtimes, exports and verified application content.
+io.github.flattool.Warehouse
+com.github.tchx84.Flatseal

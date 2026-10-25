@@ -39,3 +39,7 @@ After installing packages and staging the upstream AI payloads, use scripts/kiri
 ## Vendor account-removal gate
 
 Kirin must not ship openKylin ID, Token Centre, device registration or settings cloud sync. First inventory exact installed Huanghe packages and plugins; simulate dependency removal in the disposable target build environment. Purge the verified `openkylin-token-center` package, patch other confirmed account-dependent UI/service components, and preserve local Linux accounts, UKUI, installed AI model blobs and offline services. Stage the APT policy with `DESTDIR=/path/to/staged-root sh scripts/stage-account-policy.sh`, then run `python3 scripts/audit-online-accounts.py --root /path/to/staged-root` as a mandatory release gate. See `docs/ACCOUNTS.md` for source evidence, limitations and runtime tests.
+
+## Software Store replacement
+
+Kirin removes the openKylin Software Store (not the OS updater or APT/dpkg), and preinstalls the Flatpak runtime, Warehouse and Flatseal plus their dependencies and desktop exports into the OFFLINE image. Verify source package ownership and simulate removal before purging any Software Store component. The read-only image contract is checked by scripts/audit-software-image.py --root /path/to/staged-root. See docs/SOFTWARE.md. This cannot substitute for desktop and offline boot testing.
