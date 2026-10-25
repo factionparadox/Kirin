@@ -436,20 +436,36 @@ audit_russian() {
   return "$ok"
 }
 
-purge_reviewed() {
-  local -a wanted installed
-  mapfile -t wanted < <(pkglist "$HERE/remove-packages.txt")
-  mapfile -t installed < <(in_chroot installed "${wanted[@]}")
-  if [ ${#installed[@]} -eq 0 ]; then
-    info 'none of the listed account/store packages are installed'; return
-  fi
-  info "requested purge: ${installed[*]}"
-  in_chroot simulate-purge "${installed[@]}" > "$AUDIT/purge-simulation.txt"
-  python3 "$REPO/scripts/build/check-removal.py" --requested "${installed[@]}" \
+# simulate_and_purge NAME PKG...: purge PKGs only if the simulated transaction passes review.
+simulate_and_purge() {
+  local name=$1; shift
+  in_chroot simulate-purge "$@" > "$AUDIT/purge-$name.txt"
+  python3 "$REPO/scripts/build/check-removal.py" --requested "$@" \
       --allow "${ALLOW_REMOVAL[@]}" --model-owners "$UPSTREAM/upstream-models-owners.json" \
-      < "$AUDIT/purge-simulation.txt" ||
-    die "purge refused; inspect $AUDIT/purge-simulation.txt"
-  in_chroot purge "${installed[@]}"
+      < "$AUDIT/purge-$name.txt" || return 1
+  in_chroot purge "$@"
+}
+
+purge_reviewed() {
+  local -a wanted required optional installed
+  mapfile -t wanted < <(pkglist "$HERE/remove-packages.txt")
+  local p
+  for p in "${wanted[@]}"; do
+    case "$p" in *\?) optional+=("${p%\?}") ;; *) required+=("$p") ;; esac
+  done
+  mapfile -t installed < <(in_chroot installed "${required[@]}")
+  if [ ${#installed[@]} -gt 0 ]; then
+    info "requested purge: ${installed[*]}"
+    simulate_and_purge required "${installed[@]}" || die "purge refused; inspect $AUDIT/purge-required.txt"
+  else
+    info 'none of the listed account/store packages are installed'
+  fi
+  for p in "${optional[@]}"; do
+    [ -n "$(in_chroot installed "$p")" ] || continue
+    info "optional purge: $p"
+    simulate_and_purge "$p" "$p" ||
+      info "KEPT $p: removing it would take other packages with it; see $AUDIT/purge-$p.txt"
+  done
 }
 
 stage_customise() {

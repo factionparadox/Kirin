@@ -2,9 +2,15 @@
 # Only names actually present in the image are requested. The purge is
 # simulated first and refused if APT would remove anything else
 # (see scripts/build/check-removal.py and docs/BUILDING.md).
+# A name ending in '?' is optional: it is purged separately, and if that purge
+# would be refused, it is kept with a warning instead of stopping the build.
 
 # Accounts: verified Huanghe source package (docs/ACCOUNTS.md)
 openkylin-token-center
+
+# Kylin ID login service (kylinID.service and its D-Bus services), found by the
+# accounts audit on the real 3.0 image. Optional until we know what depends on it.
+kylin-id?
 
 # Software Store: candidate names from scripts/audit-software-image.py
 kylin-software-center

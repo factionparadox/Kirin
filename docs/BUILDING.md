@@ -51,7 +51,7 @@ The build resumes where it stopped. Completed stages are skipped. `--from STAGE`
 
 ## Safety gates
 
-- **Package removal is fail-closed.** Each purge is simulated first. The build stops if APT would remove anything not requested, or anything protected: UKUI, APT/dpkg, the installer, the updater, login/PAM, Flatpak, kernels, and any package that owns an upstream model file. After reviewing `work/audit/purge-simulation.txt`, allow a specific extra removal with `--allow-removal PKG`. Protected packages can never be allowed.
+- **Package removal is fail-closed.** Each purge is simulated first. The build stops if APT would remove anything not requested, or anything protected: UKUI, APT/dpkg, the installer, the updater, login/PAM, Flatpak, kernels, and any package that owns an upstream model file. After reviewing `work/audit/purge-required.txt`, allow a specific extra removal with `--allow-removal PKG`. Protected packages can never be allowed. Packages marked optional in `build/remove-packages.txt` (such as `kylin-id`) are purged separately; if their purge would be refused, they are kept with a warning and the accounts audit still reports them.
 - **The AI-payload contract is never waived.** If an inventoried upstream model changes or a coding-model blob is wrong, the build fails, even with `--test-build`.
 - **Policy audits gate release.** These are the software, language and accounts audits. `--test-build` packs the image anyway for VM testing and names it `…-TEST-UNVERIFIED.iso`. A first build will probably need this, because the language audit flags Chinese-only menu labels that still need real translations.
 

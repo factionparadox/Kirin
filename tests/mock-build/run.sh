@@ -101,6 +101,8 @@ R="$T/work/rootfs"
 [ -x "$R/usr/local/bin/ollama" ] && [ -f "$R/etc/systemd/system/ollama.service" ] && [ -x "$R/usr/bin/kirin-learn" ] ||
   fail 'payloads not installed'
 grep -q 'Package: openkylin-token-center' "$R/var/lib/dpkg/status" && fail 'token centre still installed'
+grep -q 'Package: kylin-id$' "$R/var/lib/dpkg/status" && fail 'kylin-id (optional purge) still installed'
+grep -q 'optional purge: kylin-id' "$T/log3" || fail 'optional purge not attempted'
 RU="$R/opt/kirin/russian"
 [ -x "$R/opt/kirin/piper/piper" ] && [ "$(ls "$RU"/voices/*.onnx | wc -l)" -eq 4 ] || fail 'Piper or voices missing'
 [ -f "$RU/library/DLI Russian Basic Course/Mod 01.pdf" ] && [ ! -e "$RU/library/DLI Russian Basic Course/Gone.pdf" ] ||
