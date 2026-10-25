@@ -50,6 +50,12 @@ class TestImageLocale(unittest.TestCase):
         self.assertIn("Comment[ru]=Панель управления UKUI\n", text)
         self.assertNotIn("控制", text)
 
+    def test_translation_ignores_whitespace_variants(self):
+        p = self.root / "usr/share/applications/com.iflytek.iflyime-setting.desktop"
+        p.write_text("[Desktop Entry]\nName=iFlyIME\nComment=讯飞输入法\u3000属性设置 \n", encoding="utf-8")
+        self.assertEqual(mod.main(["--root", str(self.root), "--apply"]), 0)
+        self.assertIn("Comment=iFlytek input method settings\n", p.read_text(encoding="utf-8"))
+
     def test_untranslated_default_fails(self):
         p = self.root / "usr/share/applications/untranslated.desktop"
         p.write_text("[Desktop Entry]\nName=中文\n", encoding="utf-8")

@@ -94,6 +94,10 @@ mount_chroot() {
   [ ${#MOUNTS[@]} -eq 0 ] || return 0
   local m
   for m in dev dev/pts proc sys run; do mkdir -p "$ROOTFS/$m"; done
+  # Make the image root a mount point of its own: Flatpak's bwrap (used for its
+  # install triggers) fails with "Failed to make / slave" in a plain chroot.
+  mount --bind "$ROOTFS" "$ROOTFS";            MOUNTS+=("$ROOTFS")
+  mount --make-private "$ROOTFS"
   mount --bind /dev "$ROOTFS/dev";             MOUNTS+=("$ROOTFS/dev")
   mount -t devpts devpts "$ROOTFS/dev/pts";    MOUNTS+=("$ROOTFS/dev/pts")
   mount -t proc proc "$ROOTFS/proc";           MOUNTS+=("$ROOTFS/proc")

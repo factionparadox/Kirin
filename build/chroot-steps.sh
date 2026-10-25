@@ -122,10 +122,21 @@ case "$step" in
   flatpak)
     flatpak remote-add --system --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
     # shellcheck disable=SC2046
-    flatpak install --system -y --noninteractive flathub $(list /kirin-build/flatpak-apps.txt)
+    # --reinstall keeps this idempotent and re-runs Flatpak's export triggers.
+    flatpak install --system -y --noninteractive --reinstall flathub $(list /kirin-build/flatpak-apps.txt)
     ;;
   finish)
-    locale-gen
+    # openKylin's locales package is Ubuntu-style: locale-gen reads
+    # /var/lib/locales/supported.d, not /etc/locale.gen. Generate only en_GB and ru_RU.
+    if [ -d /var/lib/locales/supported.d ]; then
+      for f in /var/lib/locales/supported.d/*; do
+        if [ -f "$f" ] && [ ! -L "$f" ]; then sed -i '/^zh_/d' "$f"; fi
+      done
+      printf 'en_GB.UTF-8 UTF-8\nru_RU.UTF-8 UTF-8\n' > /var/lib/locales/supported.d/kirin
+      locale-gen --purge en_GB.UTF-8 ru_RU.UTF-8
+    else
+      locale-gen
+    fi
     update-locale LANG=en_GB.UTF-8 LANGUAGE=en_GB:en
     if ! id ollama >/dev/null 2>&1; then
       useradd -r -s /usr/sbin/nologin -U -m -d /usr/share/ollama ollama

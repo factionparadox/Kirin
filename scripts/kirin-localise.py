@@ -21,13 +21,19 @@ def load_translations(path=TRANSLATIONS_FILE):
     return {k: v for k, v in data.items() if not k.startswith("_")}
 
 
+def norm(value):
+    """Collapse every Unicode whitespace run (incl. U+3000 and NBSP) to one space."""
+    return " ".join(value.split())
+
+
 def translate(lines, table):
     """Replace known Chinese-only defaults with English, adding Russian where absent."""
+    table = {field: {norm(k): v for k, v in values.items()} for field, values in table.items()}
     out = []
     present = {x.split("=", 1)[0] for x in lines if "=" in x}
     for line in lines:
         m = DEFAULT_KEY.match(line)
-        entry = table.get(m.group(1), {}).get(m.group(2)) if m else None
+        entry = table.get(m.group(1), {}).get(norm(m.group(2))) if m else None
         if entry:
             key = m.group(1)
             out.append(f"{key}={entry['en']}\n")
