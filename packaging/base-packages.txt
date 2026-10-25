@@ -1,0 +1,7 @@
+# Validate package names and availability in the actual openKylin 3.0 repository before release.
+vim
+vim-runtime
+neovim
+man-db
+manpages
+python3

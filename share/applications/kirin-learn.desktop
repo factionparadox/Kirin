@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Kirin Learn
+Comment=Learn Linux using offline tutorials
+Exec=kirin-learn browse
+Icon=help-browser
+Terminal=true
+Categories=Education;System;

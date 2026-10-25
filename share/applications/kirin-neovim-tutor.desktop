@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Kirin Neovim Tutor
+Comment=Interactive Neovim lessons
+Exec=kirin-learn tutor neovim
+Icon=accessories-text-editor
+Terminal=true
+Categories=Education;Development;

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Kirin Vim Tutor
+Comment=Interactive Vim lessons
+Exec=kirin-learn tutor vim
+Icon=accessories-text-editor
+Terminal=true
+Categories=Education;Development;

@@ -1,0 +1,31 @@
+# KIRIN NEOVIM — INTERACTIVE BASICS
+
+You can also run `:Tutor` to open Neovim's full original introduction.
+
+## Moving the cursor *movement*
+
+Use `h`, `j`, `k`, `l` to move. `0` goes to the line start; `$` to its end; `w` to the next word.
+
+Use `cw` to turn WRONG into READY here:
+
+WRONG [[READY]]
+
+## Entering text *insert*
+
+Use `i` to enter Insert mode and `<Esc>` to return to Normal mode.
+
+Put the word Kirin after the colon:
+
+Editor: [[Editor: Kirin]]
+
+## Undo and redo *undo*
+
+Use `u` to undo, `<C-r>` to redo. Try editing this line:
+
+This line is safe to edit. [[-1]]
+
+## Saving and getting help *help*
+
+`:w` saves the buffer; `:q` quits; `:q!` discards changes.
+
+Use `:help tutor` or `:help motion.txt` to learn more. Back at a shell, try `kirin-learn learn editors`.
