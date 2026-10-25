@@ -248,12 +248,14 @@ PY
     cat <<EOF
 
 REVIEW REQUIRED before the image is modified.
-  Inventory: $inv
-  Owners:    $owners
-Check that every upstream AI model is listed and nothing unrelated is. Edit the
-inventory if needed (keep sha256 values from the file), then continue with:
-  sudo $0 --iso '$ISO' --from inventory --accept-inventory \\
-       [--model-inventory $inv]
+  The list above is saved in: $inv
+Check that every upstream AI model is listed and nothing unrelated is.
+If the list is right, continue with this one command:
+
+  sudo $0 --iso '$ISO' --from inventory --accept-inventory
+
+If you edited $(basename "$inv") by hand, add: --model-inventory '$inv.reviewed'
+(save your edited copy under that name first; a re-run rescans the original).
 EOF
     exit 10
   fi

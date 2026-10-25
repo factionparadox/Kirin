@@ -18,11 +18,14 @@ import sys
 
 # Formats that are almost always model weights or tokenisers.
 STRONG_SUFFIXES = frozenset({
-    '.gguf', '.ggml', '.onnx', '.ort', '.safetensors', '.pt', '.pth', '.ckpt',
-    '.tflite', '.mnn', '.rknn', '.om', '.tiktoken', '.nb', '.mlmodel',
+    '.gguf', '.ggml', '.onnx', '.ort', '.safetensors', '.pth', '.ckpt',
+    '.tflite', '.mnn', '.rknn', '.tiktoken', '.mlmodel',
 })
 # Ambiguous formats: only counted when the path also looks AI-related.
-WEAK_SUFFIXES = frozenset({'.bin', '.model', '.param', '.pb', '.h5', '.vocab', '.dat', '.npz', '.npy'})
+# (.pt and .nb are also language codes, e.g. Vim's tutor1.pt and tutor1.nb.)
+WEAK_SUFFIXES = frozenset({'.bin', '.model', '.param', '.pb', '.h5', '.vocab', '.dat', '.npz', '.npy',
+                           '.pt', '.nb', '.om'})
+SHARED_LIBRARY = re.compile(r'\.so(?:\.\d+)*$')
 KEYWORDS = frozenset({
     'ai', 'llm', 'model', 'models', 'asr', 'tts', 'ocr', 'nlp', 'vision', 'embedding',
     'embeddings', 'tokenizer', 'qwen', 'kylinbot', 'intelligence', 'intelligent',
@@ -52,7 +55,8 @@ def is_candidate(rel: str, size: int) -> bool:
         return True
     if suffix in WEAK_SUFFIXES and size >= WEAK_MIN and ai_path:
         return True
-    return size >= LARGE_MIN and ai_path
+    # Big files under an AI path count too, except libraries such as libtorch_cpu.so.
+    return size >= LARGE_MIN and ai_path and not SHARED_LIBRARY.search(rel)
 
 
 def check_root(root: Path) -> Path:

@@ -50,8 +50,13 @@ class TestInventory(TempRoot):
         self.put('usr/lib/firmware/model.onnx', 8192)               # firmware skipped
         self.put('home/user/private.gguf', 8192)                    # home skipped
         self.put('opt/kylin-ai/tiny.onnx', 100)                     # too small
+        self.put('usr/share/vim/vim91/tutor/tutor1.pt', 37094)      # language code, not PyTorch
+        self.put('usr/share/vim/vim91/tutor/tutor1.nb', 35531)
+        self.put('usr/share/kylin-ai-python-env/lib/torch/lib/libtorch_cpu.so', 300 << 20)
+        self.put('usr/share/kylin-ai/llm/weights', 300 << 20)       # large, AI path, no suffix
         found = dict(inventory.scan(self.root))
-        self.assertEqual(set(found), {'opt/kylin-ai/asr/encoder.onnx', 'usr/share/kylinbot/models/weights.bin'})
+        self.assertEqual(set(found), {'opt/kylin-ai/asr/encoder.onnx', 'usr/share/kylinbot/models/weights.bin',
+                                      'usr/share/kylin-ai/llm/weights'})
 
     def test_does_not_follow_symlinks(self):
         outside = Path(self.temp.name) / 'outside'
