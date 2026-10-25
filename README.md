@@ -40,3 +40,7 @@ This repository does **not** yet provide an integrated, installable openKylin IS
 Systemd's `birthDate` exclusion is a downstream source patch requirement, **not** merely a version hold: see `docs/SYSTEMD-POLICY.md`.
 
 Primary upstream references: [openKylin](https://www.openkylin.top/), [ZFSBootMenu](https://docs.zfsbootmenu.org/), [Neovim Tutor](https://neovim.io/doc/user/pi_tutor/), [Qwen2.5-Coder](https://ollama.com/library/qwen2.5-coder:7b-instruct).
+
+## Languages
+
+Kirin's default is **British English (en_GB.UTF-8)** with **Russian (ru_RU.UTF-8)** as the second supported language. The offline image build excludes Chinese-language UI catalogues and menu translations while retaining all upstream AI model files, functional code and Unicode fonts. See [language policy](docs/LANGUAGES.md) and run the source-stage localisation/audit tool before ISO creation. Full UKUI translation still requires image-level testing.

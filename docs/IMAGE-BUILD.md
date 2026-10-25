@@ -31,3 +31,7 @@ Retain openKylin Huanghe repositories as primary. Cross-distribution Debian/Ubun
 ## ZFS
 
 ZFS-root, ZFSBootMenu, boot-environment cloning, rollback and graphical storage controls remain separate release requirements. No current teaching component claims to implement or validate them.
+
+## Language-localisation stage
+
+After installing packages and staging the upstream AI payloads, use scripts/kirin-localise.py --root /path/to/staged-root --apply and --audit. Generate both en_GB.UTF-8 and ru_RU.UTF-8 locales inside the target image; test UKUI in both languages, and rerun the audit after package changes. See docs/LANGUAGES.md. Chinese catalogues may be excluded; never remove fonts or upstream model files.

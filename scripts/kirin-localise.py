@@ -1,0 +1,128 @@
+#!/usr/bin/env python3
+"""Offline Kirin image localisation; never runs on the live root."""
+import argparse
+import json
+import re
+import sys
+from pathlib import Path
+
+ZH = re.compile(r"^zh(?:$|[_-](?:CN|TW|HK|SG|Hans|Hant)$)", re.I)
+ZH_NAME = re.compile(r"(?:^|[_.-])zh(?:[_-](?:CN|TW|HK|SG|Hans|Hant))?(?=[_.-]|$)", re.I)
+ZH_KEY = re.compile(r"^\s*[A-Za-z][A-Za-z0-9-]*\[zh(?:[_-][A-Za-z0-9@-]+)?\]\s*=", re.I)
+CJK = re.compile("[\u3400-\u9fff]")
+LOCALE_DIRS = ("usr/share/locale", "usr/share/locale-langpack", "usr/share/man", "usr/share/help")
+CATALOG_DIRS = ("usr/share/qt5/translations", "usr/share/qt6/translations",
+                "usr/share/ukui/translations", "usr/share/kylin/translations")
+DESKTOP_DIRS = ("usr/share/applications", "usr/share/desktop-directories",
+                "usr/share/xsessions", "etc/xdg/autostart")
+POLICY = {
+    "etc/locale.gen": "en_GB.UTF-8 UTF-8\nru_RU.UTF-8 UTF-8\n",
+    "etc/default/locale": "LANG=en_GB.UTF-8\nLANGUAGE=en_GB:en\n",
+    "etc/locale.conf": "LANG=en_GB.UTF-8\n",
+    "etc/default/keyboard": 'XKBMODEL="pc105"\nXKBLAYOUT="gb"\nXKBVARIANT=""\nXKBOPTIONS=""\nBACKSPACE="guess"\n',
+    "etc/dpkg/dpkg.cfg.d/90kirin-languages": (
+        "# Suppress Chinese-language catalogues on future package installs.\n"
+        + "".join(f"path-exclude=/usr/share/{p}/zh*/*\n" for p in ("locale", "locale-langpack", "man", "help"))
+        + "".join(f"path-exclude=/{p}/*_zh*.qm\n" for p in CATALOG_DIRS)
+    ),
+    "usr/share/kirin/locale-policy.json": json.dumps({
+        "default": "en_GB.UTF-8", "available": ["en_GB.UTF-8", "ru_RU.UTF-8"],
+        "keyboards": ["gb", "ru"], "preserve_upstream_ai": True
+    }, indent=2) + "\n",
+}
+
+def root_check(root):
+    if not root.is_absolute() or not root.is_dir() or root.is_symlink() or root.resolve() == Path("/"):
+        raise ValueError("requires an existing nonsymlink offline image root other than /")
+    return root
+
+def inside(root, rel):
+    path = root
+    for part in Path(rel).parts:
+        path = path / part
+        if path.is_symlink():
+            raise ValueError(f"symlink in image path: {path}")
+    return path
+
+def discover(root):
+    files, dirs, menus, untranslated = [], [], [], []
+    for rel in LOCALE_DIRS:
+        folder = inside(root, rel)
+        if folder.is_dir():
+            for child in folder.iterdir():
+                if ZH.match(child.name):
+                    if child.is_symlink(): raise ValueError(f"symlinked locale: {child}")
+                    if child.is_dir():
+                        descendants = list(child.rglob("*"))
+                        if any(p.is_symlink() for p in descendants): raise ValueError(f"symlink in locale: {child}")
+                        files.extend(p for p in descendants if p.is_file())
+                        dirs.append(child)
+    for rel in CATALOG_DIRS:
+        folder = inside(root, rel)
+        if folder.is_dir():
+            for p in folder.rglob("*"):
+                if p.is_file() and ZH_NAME.search(p.stem) and p.suffix.lower() in (".qm", ".mo", ".ts", ".po", ".json"):
+                    if p.is_symlink(): raise ValueError(f"symlinked catalogue: {p}")
+                    files.append(p)
+    for rel in DESKTOP_DIRS:
+        folder = inside(root, rel)
+        if folder.is_dir():
+            for p in folder.rglob("*.desktop"):
+                if p.is_symlink(): raise ValueError(f"symlinked desktop file: {p}")
+                raw = p.read_text(encoding="utf-8")
+                kept = [x for x in raw.splitlines(keepends=True) if not ZH_KEY.match(x)]
+                new = "".join(kept)
+                if new != raw: menus.append((p, new))
+                for line in kept:
+                    if line.startswith(("Name=", "GenericName=", "Comment=")) and CJK.search(line):
+                        untranslated.append(f"{p.relative_to(root)}: untranslated default: {line.strip()}")
+    return sorted(set(files)), dirs, menus, untranslated
+
+def run(root, mode):
+    files, dirs, menus, untranslated = discover(root)
+    if mode == "plan":
+        for p in files: print("REMOVE:", p.relative_to(root))
+        for p, _ in menus: print("CLEAN MENU:", p.relative_to(root))
+        for rel in POLICY: print("WRITE:", rel)
+    elif mode == "apply":
+        for p in files: p.unlink()
+        for d in dirs:
+            for sub in sorted((p for p in d.rglob("*") if p.is_dir()), key=lambda p: len(p.parts), reverse=True):
+                if not any(sub.iterdir()): sub.rmdir()
+            if not any(d.iterdir()): d.rmdir()
+        for p, content in menus: p.write_text(content, encoding="utf-8")
+        for rel, value in POLICY.items():
+            path = inside(root, rel)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(value, encoding="utf-8")
+    elif mode == "audit":
+        problems = [f"Chinese translation: {p.relative_to(root)}" for p in files]
+        problems += [f"Chinese desktop translation: {p.relative_to(root)}" for p, _ in menus]
+        for rel, content in POLICY.items():
+            path = inside(root, rel)
+            if not path.is_file() or path.read_text(encoding="utf-8") != content:
+                problems.append(f"locale policy missing/modified: {rel}")
+        for item in problems: print("FAIL:", item)
+        if problems: return 1
+    for item in untranslated: print("NEEDS TRANSLATION:", item)
+    if untranslated: return 1
+    print("Kirin language policy check complete (runtime UKUI translation QA still required)")
+    return 0
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Stage English UK / Russian into Kirin offline image")
+    parser.add_argument("--root", required=True, type=Path)
+    modes = parser.add_mutually_exclusive_group(required=True)
+    for mode in ("plan", "apply", "audit"):
+        modes.add_argument("--" + mode, action="store_true")
+    args = parser.parse_args(argv)
+    try:
+        root = root_check(args.root)
+        mode = next(x for x in ("plan", "apply", "audit") if getattr(args, x))
+        return run(root, mode)
+    except (OSError, ValueError, UnicodeError) as e:
+        print("REFUSED:", e, file=sys.stderr)
+        return 2
+
+if __name__ == "__main__":
+    sys.exit(main())
