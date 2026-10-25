@@ -29,7 +29,7 @@ SCAN_PATHS = (
     'usr/share/applications', 'usr/local/share/applications',
     'etc/xdg/autostart', 'usr/share/desktop-directories',
     'usr/share/dbus-1/services', 'usr/share/dbus-1/system-services',
-    'etc/systemd/system', 'usr/lib/systemd/system', 'lib/systemd/system',
+    'etc/systemd/system', 'usr/lib/systemd/system',
 )
 EXCLUDE_SUFFIXES = {'.png', '.jpg', '.svg', '.so', '.bin', '.mo', '.qm', '.pyc'}
 # Local accounts and security services must never be removed as "cloud accounts".
@@ -88,7 +88,11 @@ def audit(root: Path) -> list[str]:
             raise ValueError(f'non-directory policy scan root: {folder_rel}')
         for path in folder.rglob('*'):
             if path.is_symlink():
-                raise ValueError(f'symlink in policy scan: {path.relative_to(root)}')
+                # Unit aliases and masked units are normal on merged-/usr systems.
+                # Never follow links into the host when inspecting an offline root.
+                if REVIEW_PACKAGE_RE.search(path.name) or any(sig.search(path.name) for _, sig in ACCOUNT_SIGNATURES):
+                    findings.append(f'REVIEW account-related symlink: {path.relative_to(root)}')
+                continue
             if not path.is_file() or path.suffix.lower() in EXCLUDE_SUFFIXES:
                 continue
             if path.stat().st_size > 256_000:

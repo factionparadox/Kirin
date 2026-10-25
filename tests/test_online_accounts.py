@@ -65,12 +65,25 @@ class AccountAuditTests(unittest.TestCase):
     def test_no_live_root(self):
         self.assertEqual(policy.main(['--root', '/']), 2)
 
-    def test_no_symlinks_in_scan(self):
+    def test_normal_service_symlinks_allowed(self):
         self.add(['accountsservice'])
-        d = self.root / 'usr/share/applications'
+        d = self.root / 'usr/lib/systemd/system'
         d.mkdir(parents=True)
-        (d / 'link.desktop').symlink_to(self.status)
-        self.assertEqual(policy.main(['--root', str(self.root)]), 2)
+        (d / 'masked.service').symlink_to('/dev/null')
+        self.assertEqual(policy.main(['--root', str(self.root)]), 0)
+
+    def test_suspicious_service_symlinks_flagged(self):
+        self.add(['accountsservice'])
+        d = self.root / 'usr/lib/systemd/system'
+        d.mkdir(parents=True)
+        (d / 'kylin-id.service').symlink_to('/dev/null')
+        self.assertEqual(policy.main(['--root', str(self.root)]), 1)
+
+    def test_merged_usr_symlink_allowed(self):
+        self.add(['accountsservice'])
+        (self.root / 'usr/lib/systemd/system').mkdir(parents=True)
+        (self.root / 'lib').symlink_to('usr/lib')
+        self.assertEqual(policy.main(['--root', str(self.root)]), 0)
 
     def test_unverified_package_must_review(self):
         self.add(['kylin-cloud-sync'])
