@@ -45,30 +45,34 @@ def inside(root, rel):
     return path
 
 def discover(root):
-    files, dirs, menus, untranslated = [], [], [], []
+    # Symlinks are only ever removed as links, never followed: a zh_CN link to
+    # another locale (e.g. zh_CN -> zh_Hans, or a hostile one to ru_RU) loses the
+    # link while its target is judged on its own name.
+    files, dirs, menus, untranslated, links = [], [], [], [], []
     for rel in LOCALE_DIRS:
         folder = inside(root, rel)
         if folder.is_dir():
             for child in folder.iterdir():
                 if ZH.match(child.name):
-                    if child.is_symlink(): raise ValueError(f"symlinked locale: {child}")
-                    if child.is_dir():
-                        descendants = list(child.rglob("*"))
-                        if any(p.is_symlink() for p in descendants): raise ValueError(f"symlink in locale: {child}")
-                        files.extend(p for p in descendants if p.is_file())
+                    if child.is_symlink():
+                        links.append(child)
+                    elif child.is_dir():
+                        for p in child.rglob("*"):   # rglob does not descend into linked directories
+                            if p.is_symlink(): links.append(p)
+                            elif p.is_file(): files.append(p)
                         dirs.append(child)
     for rel in CATALOG_DIRS:
         folder = inside(root, rel)
         if folder.is_dir():
             for p in folder.rglob("*"):
-                if p.is_file() and ZH_NAME.search(p.stem) and p.suffix.lower() in (".qm", ".mo", ".ts", ".po", ".json"):
-                    if p.is_symlink(): raise ValueError(f"symlinked catalogue: {p}")
-                    files.append(p)
+                if ZH_NAME.search(p.stem) and p.suffix.lower() in (".qm", ".mo", ".ts", ".po", ".json"):
+                    if p.is_symlink(): links.append(p)
+                    elif p.is_file(): files.append(p)
     for rel in DESKTOP_DIRS:
         folder = inside(root, rel)
         if folder.is_dir():
             for p in folder.rglob("*.desktop"):
-                if p.is_symlink(): raise ValueError(f"symlinked desktop file: {p}")
+                if p.is_symlink(): continue   # never rewrite through a link; targets in these folders are scanned directly
                 raw = p.read_text(encoding="utf-8")
                 kept = [x for x in raw.splitlines(keepends=True) if not ZH_KEY.match(x)]
                 new = "".join(kept)
@@ -76,15 +80,17 @@ def discover(root):
                 for line in kept:
                     if line.startswith(("Name=", "GenericName=", "Comment=")) and CJK.search(line):
                         untranslated.append(f"{p.relative_to(root)}: untranslated default: {line.strip()}")
-    return sorted(set(files)), dirs, menus, untranslated
+    return sorted(set(files)), dirs, menus, untranslated, sorted(set(links))
 
 def run(root, mode):
-    files, dirs, menus, untranslated = discover(root)
+    files, dirs, menus, untranslated, links = discover(root)
     if mode == "plan":
+        for p in links: print("REMOVE LINK:", p.relative_to(root))
         for p in files: print("REMOVE:", p.relative_to(root))
         for p, _ in menus: print("CLEAN MENU:", p.relative_to(root))
         for rel in POLICY: print("WRITE:", rel)
     elif mode == "apply":
+        for p in links: p.unlink()      # removes the link itself only
         for p in files: p.unlink()
         for d in dirs:
             for sub in sorted((p for p in d.rglob("*") if p.is_dir()), key=lambda p: len(p.parts), reverse=True):
@@ -97,6 +103,7 @@ def run(root, mode):
             path.write_text(value, encoding="utf-8")
     elif mode == "audit":
         problems = [f"Chinese translation: {p.relative_to(root)}" for p in files]
+        problems += [f"Chinese translation link: {p.relative_to(root)}" for p in links]
         problems += [f"Chinese desktop translation: {p.relative_to(root)}" for p, _ in menus]
         for rel, content in POLICY.items():
             path = inside(root, rel)

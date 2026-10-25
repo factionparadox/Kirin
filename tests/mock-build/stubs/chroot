@@ -13,6 +13,7 @@ def write(names): status.write_text(''.join(f'Package: {p}\nStatus: install ok i
 if step == 'installed':
     print('\n'.join(p for p in args if p in pkgs))
 elif step == 'install':
+    assert (root / 'kirin-build/libfyaml-0.9.6.tar.gz').is_file(), 'libfyaml source not staged'
     lst = (root / 'kirin-build/base-packages.txt').read_text()
     want = [l.strip() for l in lst.splitlines() if l.strip() and not l.startswith('#')] + ['locales']
     write(pkgs + [p for p in want if p not in pkgs])

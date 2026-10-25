@@ -48,7 +48,23 @@ class TestImageLocale(unittest.TestCase):
     def test_no_live_root(self):
         self.assertEqual(mod.main(["--root", "/", "--apply"]), 2)
 
-    def test_symlink_protection(self):
+    def test_symlinks_removed_without_following(self):
         parent = self.root / "usr/share/locale"
         (parent / "zh_TW").symlink_to(parent / "ru_RU", target_is_directory=True)
+        inner = parent / "zh_CN/LC_MESSAGES/link.mo"
+        inner.symlink_to(parent / "ru_RU/LC_MESSAGES/panel.mo")
+        qt = self.root / "usr/share/qt6/translations/qtbase_zh_CN.qm"
+        qt.symlink_to(parent / "ru_RU/LC_MESSAGES/panel.mo")
+        self.assertEqual(mod.main(["--root", str(self.root), "--apply"]), 0)
+        self.assertEqual(mod.main(["--root", str(self.root), "--audit"]), 0)
+        for link in (parent / "zh_TW", inner, qt):
+            self.assertFalse(link.is_symlink(), link)
+        self.assertEqual((parent / "ru_RU/LC_MESSAGES/panel.mo").read_bytes(), b"untouched")
+
+    def test_symlinked_scan_root_still_refused(self):
+        real = self.root / "elsewhere"
+        real.mkdir()
+        share = self.root / "usr/share"
+        (share / "locale").rename(real / "locale")
+        (share / "locale").symlink_to(real / "locale", target_is_directory=True)
         self.assertEqual(mod.main(["--root", str(self.root), "--apply"]), 2)

@@ -15,6 +15,9 @@ REPO=$(cd -- "$HERE/.." && pwd)
 STAGES=(preflight verify extract inventory payloads customise audit pack)
 QWEN_TAG='qwen2.5-coder:7b-instruct'
 OLLAMA_VERSION_DEFAULT='v0.40.11'
+# Kirin compatibility build of libfyaml0 (see build/chroot-steps.sh compat_libfyaml).
+FYAML_VERSION='0.9.6'
+FYAML_SHA256=${KIRIN_TEST_FYAML_SHA256:-a59cc3331e2eb903ec36933ad52a45888041cac31e44f553a00511131242c483}
 MIN_FREE_GB=${KIRIN_MIN_FREE_GB:-70}
 
 ISO='' ISO_SHA256='' WORK="$PWD/work" OUT="$PWD/out" SQUASHFS_REL=''
@@ -116,6 +119,8 @@ mount_chroot() {
   mkdir -p "$ROOTFS/kirin-build"
   install -m 0755 "$HERE/chroot-steps.sh" "$ROOTFS/kirin-build/chroot-steps.sh"
   install -m 0644 "$REPO/packaging/base-packages.txt" "$REPO/packaging/flatpak-apps.txt" "$ROOTFS/kirin-build/"
+  [ ! -f "$PAYLOADS/libfyaml-$FYAML_VERSION.tar.gz" ] ||
+    install -m 0644 "$PAYLOADS/libfyaml-$FYAML_VERSION.tar.gz" "$ROOTFS/kirin-build/"
   touch "$ROOTFS/kirin-build/IN_CHROOT"
 }
 
@@ -307,10 +312,21 @@ pull_qwen() {
   python3 "$REPO/scripts/build/qwen-index.py" --models "$models" --tag "$QWEN_TAG" --out "$index"
 }
 
+fetch_libfyaml() {
+  local tarball="$PAYLOADS/libfyaml-$FYAML_VERSION.tar.gz"
+  if [ ! -f "$tarball" ] || [ "$(sha256sum "$tarball" | cut -d' ' -f1)" != "$FYAML_SHA256" ]; then
+    curl -fsSL "https://github.com/pantoniou/libfyaml/releases/download/v$FYAML_VERSION/libfyaml-$FYAML_VERSION.tar.gz" \
+      -o "$tarball"
+  fi
+  [ "$(sha256sum "$tarball" | cut -d' ' -f1)" = "$FYAML_SHA256" ] || die "libfyaml $FYAML_VERSION source checksum mismatch"
+  info "libfyaml $FYAML_VERSION source verified"
+}
+
 stage_payloads() {
-  log 'Fetching payloads: Ollama runtime and Qwen2.5-Coder 7B'
+  log 'Fetching payloads: Ollama runtime, Qwen2.5-Coder 7B and compatibility sources'
   fetch_ollama
   pull_qwen
+  fetch_libfyaml
 }
 
 purge_reviewed() {
@@ -332,6 +348,8 @@ purge_reviewed() {
 stage_customise() {
   log 'Customising the image'
   [ -f "$PAYLOADS/qwen-blobs.json" ] || die 'run the payloads stage first'
+  # Payloads added after a first run (e.g. the libfyaml source) are fetched here.
+  [ -f "$PAYLOADS/libfyaml-$FYAML_VERSION.tar.gz" ] || fetch_libfyaml
   local olroot="$PAYLOADS/ollama-$OLLAMA_VERSION/root"
 
   # Language policy first, so dpkg path-exclusions apply to packages installed next.

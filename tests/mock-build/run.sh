@@ -36,6 +36,8 @@ cat > "$P/models/manifests/registry.ollama.ai/library/qwen2.5-coder/7b-instruct"
 {"config":{"digest":"sha256:$csha","size":2},"layers":[{"digest":"sha256:$wsha","size":4100000000,"mediaType":"application/vnd.ollama.image.model"}]}
 EOF
 python3 "$REPO/scripts/build/qwen-index.py" --models "$P/models" --out "$P/qwen-blobs.json" >/dev/null
+printf 'fake libfyaml source' > "$P/libfyaml-0.9.6.tar.gz"
+export KIRIN_TEST_FYAML_SHA256; KIRIN_TEST_FYAML_SHA256=$(sha256sum "$P/libfyaml-0.9.6.tar.gz" | cut -d' ' -f1)
 
 echo '--- 1. wrong checksum is refused'
 if "$REPO/build/kirin-build.sh" --iso "$T/upstream.iso" --iso-sha256 "$(printf '0%.0s' {1..64})" \
