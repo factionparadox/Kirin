@@ -300,6 +300,11 @@ case "$step" in
       for unit in $(systemctl list-unit-files --no-legend 'biometric*' 2>/dev/null | awk '{print $1}'); do
         systemctl mask "$unit" >/dev/null 2>&1 && echo "masked $unit"
       done
+      if grep -q 'pam_biometric' /etc/pam.d/common-auth; then
+        sed -i '/pam_biometric\.so/d' /etc/pam.d/common-auth
+        echo 'FINGERPRINT: removed a leftover pam_biometric line from common-auth'
+      fi
+      grep -q 'pam_fprintd' /etc/pam.d/common-auth || echo 'FINGERPRINT WARNING: pam_fprintd is not in common-auth'
       echo 'FINGERPRINT: fprintd enabled for login, lock screen and sudo'
     else
       echo 'FINGERPRINT: libpam-fprintd not installed; leaving openKylin biometrics as they are'
