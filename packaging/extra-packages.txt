@@ -1,3 +1,15 @@
 # Installed after the pinned Ubuntu/Debian repositories are added, so each comes from
 # openKylin if it has it and otherwise from Ubuntu 26.04 or Debian 13. Not fatal if missing.
 fastfetch
+libreoffice
+libreoffice-l10n-en-gb
+libreoffice-help-en-gb
+libreoffice-l10n-ru
+libreoffice-help-ru
+hunspell-en-gb
+hunspell-ru
+vlc
+mpv
+fzf
+yt-dlp
+ffmpeg

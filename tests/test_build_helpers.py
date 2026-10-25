@@ -2,6 +2,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import shutil
 from contextlib import redirect_stdout, redirect_stderr
 from pathlib import Path
 import tempfile
@@ -23,6 +24,8 @@ removal = load('check-removal')
 recovery = load('recover-squashfs')
 alpaca = load('seed-alpaca')
 bootcfg = load('iso-boot-config')
+debs = load('build-debs')
+proton = load('fetch-proton')
 
 
 def quiet(fn, *args):
@@ -271,6 +274,83 @@ class TestIsoBootConfig(TempRoot):
         self.assertIn('untranslated menu text', err.getvalue())
         self.assertFalse((out / 'isolinux/plain.cfg').exists())
         self.assertIn('zh_CN', (tree / 'boot/grub/grub.cfg').read_text())   # source tree untouched
+
+
+@unittest.skipUnless(shutil.which('dpkg-deb'), 'dpkg-deb not installed')
+class TestBuildDebs(TempRoot):
+    def make_spec(self, sha=None):
+        src = self.root / 'src'; src.mkdir()
+        (src / 'tool').write_text('#!/bin/sh\necho hi\n')
+        good = hashlib.sha256((src / 'tool').read_bytes()).hexdigest()
+        spec_dir = self.root / 'specs/demo'; spec_dir.mkdir(parents=True)
+        (spec_dir / 'spec.json').write_text(json.dumps({
+            'package': 'demo', 'version': '1.0-1kirin1', 'architecture': 'all', 'depends': 'curl, mpv',
+            'summary': 'demo tool', 'description': 'First line.\n\nSecond paragraph.',
+            'files': [{'url': (src / 'tool').as_uri(), 'sha256': sha or good, 'dest': 'usr/bin/demo', 'mode': '0755'}]}))
+        return self.root / 'specs'
+
+    def test_builds_installable_deb(self):
+        import subprocess
+        out = self.root / 'out'
+        self.assertEqual(quiet(debs.main, ['--specs', str(self.make_spec()), '--out', str(out)]), 0)
+        deb = out / 'demo_1.0-1kirin1_all.deb'
+        info = subprocess.run(['dpkg-deb', '-I', str(deb)], capture_output=True, text=True, check=True).stdout
+        self.assertIn('Depends: curl, mpv', info)
+        self.assertIn(' .\n', info)                                  # blank description line encoded
+        listing = subprocess.run(['dpkg-deb', '-c', str(deb)], capture_output=True, text=True, check=True).stdout
+        self.assertRegex(listing, r'-rwxr-xr-x root/root .* ./usr/bin/demo')
+
+    def test_wrong_hash_refused(self):
+        self.assertEqual(quiet(debs.main, ['--specs', str(self.make_spec('0' * 64)), '--out', str(self.root / 'o')]), 1)
+        self.assertFalse(list((self.root / 'o').glob('*.deb')) if (self.root / 'o').exists() else [])
+
+    def test_real_specs_are_valid(self):
+        for spec in (Path(__file__).resolve().parents[1] / 'packaging/debs').glob('*/spec.json'):
+            debs.load_spec(spec)
+
+    def test_unsafe_destination_rejected(self):
+        spec = self.make_spec()
+        data = json.loads((spec / 'demo/spec.json').read_text())
+        data['files'][0]['dest'] = '../../etc/passwd'
+        (spec / 'demo/spec.json').write_text(json.dumps(data))
+        with self.assertRaises(ValueError):
+            debs.load_spec(spec / 'demo/spec.json')
+
+
+class TestFetchProton(TempRoot):
+    def setup_site(self, good_sha=True):
+        site = self.root / 'site'; site.mkdir()
+        (site / 'release.deb').write_bytes(b'vpn release')
+        (site / 'ProtonPass_1.2.3.deb').write_bytes(b'pass deb')
+        sha = hashlib.sha512(b'pass deb').hexdigest() if good_sha else '0' * 128
+        (site / 'pass.json').write_text(json.dumps({'Releases': [
+            {'Version': '1.2.3', 'File': [{'Identifier': 'ProtonPass_1.2.3.deb', 'Sha512CheckSum': sha}]},
+            {'Version': '1.2.2', 'File': [{'Identifier': 'old.deb', 'Sha512CheckSum': 'a' * 128}]}]}))
+        config = self.root / 'proton.json'
+        config.write_text(json.dumps({
+            'vpn': {'url': (site / 'release.deb').as_uri(), 'sha256': hashlib.sha256(b'vpn release').hexdigest(),
+                    'package': 'proton-vpn-gnome-desktop'},
+            'pass': {'version_json': (site / 'pass.json').as_uri()},
+            'mail': {'version_json': (site / 'missing.json').as_uri()}}))
+        return config
+
+    def run_fetch(self, config):
+        out = io.StringIO()
+        with redirect_stdout(out):
+            self.assertEqual(proton.main(['--config', str(config), '--dest', str(self.root / 'out')]), 0)
+        return out.getvalue()
+
+    def test_verifies_and_skips_independently(self):
+        log = self.run_fetch(self.setup_site())
+        self.assertIn('vpn: release package verified', log)
+        self.assertIn('pass: ProtonPass_1.2.3.deb verified', log)
+        self.assertIn('SKIPPED mail', log)
+        self.assertEqual((self.root / 'out/protonpass.deb').read_bytes(), b'pass deb')
+
+    def test_bad_checksum_is_skipped_not_written(self):
+        log = self.run_fetch(self.setup_site(good_sha=False))
+        self.assertIn('SKIPPED pass', log)
+        self.assertFalse((self.root / 'out/protonpass.deb').exists())
 
 
 if __name__ == '__main__':

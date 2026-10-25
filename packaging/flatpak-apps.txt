@@ -6,3 +6,7 @@ com.github.tchx84.Flatseal
 org.kiwix.desktop
 # Desktop chat app for Kirin's Ollama models (pre-connected by scripts/build/seed-alpaca.py).
 com.jeffser.Alpaca
+# Discord (Flathub build of Discord's official client; updates through Warehouse).
+com.discordapp.Discord
+# Sober, for Roblox (distributed only as a Flatpak).
+org.vinegarhq.Sober

@@ -12,6 +12,10 @@ openkylin-token-center
 # accounts audit on the real 3.0 image. Optional until we know what depends on it.
 kylin-id?
 
+# openKylin's AI assistant app ("Xiao K"); Alpaca replaces it. Its models stay:
+# the purge is refused if it would remove any package that owns an upstream model.
+kylin-aiassistant?
+
 # Software Store: candidate names from scripts/audit-software-image.py
 kylin-software-center
 ubuntu-kylin-software-center

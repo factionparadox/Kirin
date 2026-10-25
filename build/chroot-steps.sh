@@ -125,6 +125,45 @@ case "$step" in
       fi
     done
     ;;
+  kirin-debs)
+    # Kirin's own packages, built from pinned upstream sources (packaging/debs).
+    rm -rf /kirin-build/debs-out
+    if python3 /kirin-build/build-debs.py --specs /kirin-build/debs --out /kirin-build/debs-out; then
+      # shellcheck disable=SC2086
+      apt-get install -y -q --no-install-recommends $apt_opts /kirin-build/debs-out/*.deb >/dev/null &&
+        echo "installed: $(cd /kirin-build/debs-out && ls -- *.deb | tr '\n' ' ')" ||
+        echo 'NOT INSTALLED: Kirin packages (dependencies unavailable)'
+    else
+      echo 'NOT BUILT: Kirin packages (see messages above)'
+    fi
+    # Kirin's signed APT repository, once its key exists (docs/KIRIN-REPO.md).
+    if [ -f /kirin-build/kirin-repo/kirin-archive-keyring.gpg ]; then
+      install -d -m 0755 /etc/apt/keyrings
+      install -m 0644 /kirin-build/kirin-repo/kirin-archive-keyring.gpg /etc/apt/keyrings/kirin-archive.gpg
+      printf 'Types: deb\nURIs: %s\nSuites: stable\nComponents: main\nSigned-By: /etc/apt/keyrings/kirin-archive.gpg\n' \
+        "$(cat /kirin-build/kirin-repo/url)" > /etc/apt/sources.list.d/kirin.sources
+      echo 'ENABLED Kirin APT repository'
+    fi
+    ;;
+  proton)
+    # Proton's official packages (verified on the host by scripts/build/fetch-proton.py).
+    d=/kirin-build/proton
+    if [ -f "$d/protonvpn-release.deb" ]; then
+      # shellcheck disable=SC2086
+      if dpkg -i "$d/protonvpn-release.deb" >/dev/null && apt-get update -q >/dev/null 2>&1 &&
+         apt-get install -y -q $apt_opts "$(cat "$d/protonvpn-package")" >/dev/null; then
+        echo 'installed Proton VPN (updates from repo.protonvpn.com)'
+      else
+        echo 'NOT INSTALLED: Proton VPN'
+      fi
+    fi
+    for app in pass mail; do
+      [ -f "$d/proton$app.deb" ] || { echo "NOT AVAILABLE: Proton $app"; continue; }
+      # shellcheck disable=SC2086
+      if apt-get install -y -q $apt_opts "$d/proton$app.deb" >/dev/null; then echo "installed Proton $app"
+      else echo "NOT INSTALLED: Proton $app"; fi
+    done
+    ;;
   simulate-purge)
     apt-get -s purge "$@"
     ;;

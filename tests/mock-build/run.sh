@@ -62,6 +62,8 @@ printf 'dictionary' > "$SITE/$ZIM"; printf '%s  %s\n' "$(sha256sum "$SITE/$ZIM" 
 FIX="$REPO/tests/fixtures"
 KIRIN_TEST_DEBIAN_KEYS="file://$FIX/test-key-rsa.asc=$(head -1 "$FIX/test-key-fingerprints.txt")"
 export KIRIN_TEST_DEBIAN_KEYS
+printf '{"vpn": {"url": "file:///nonexistent/vpn.deb", "sha256": "%064d", "package": "x"}, "pass": {"version_json": "file:///nonexistent/p.json"}}' 0 > "$T/proton.json"
+export KIRIN_TEST_PROTON_JSON="$T/proton.json"
 export KIRIN_TEST_VOICES_TSV="$T/voices.tsv" KIRIN_TEST_LIBRARY_TSV="$T/library.tsv" KIRIN_TEST_KIWIX_INDEX="file://$SITE/"
 export KIRIN_TEST_FYAML_SHA256; KIRIN_TEST_FYAML_SHA256=$(sha256sum "$P/libfyaml-0.9.6.tar.gz" | cut -d' ' -f1)
 
@@ -131,6 +133,10 @@ grep -q 'NAME="Kirin Linux"' "$R/usr/lib/os-release" || fail 'os-release not reb
 [ -f "$R/etc/skel/.var/app/com.jeffser.Alpaca/data/alpaca.db" ] || fail 'Alpaca not pre-connected'
 grep -q 'ENABLED debian' "$T/work/audit/extra-repos.log" || fail 'extra repos step not run'
 grep -q 'installed fastfetch' "$T/work/audit/extra-packages.log" || fail 'extra packages step not run'
+grep -q 'ani-cli' "$T/work/audit/kirin-debs.log" || fail 'Kirin packages step not run'
+grep -q 'Proton' "$T/work/audit/proton.log" || fail 'Proton step not run'
+cat "$T/log2" "$T/log3" | grep -q 'SKIPPED vpn' || fail 'unreachable Proton source not skipped gracefully'
+cat "$T/log2" "$T/log3" | grep -q 'Kirin APT repository not set up yet' || fail 'missing Kirin key not reported'
 grep -q 'keeping openKylin.s live initrd' "$T/log3" || fail 'live initrd decision not reported'
 
 echo '--- 5. a policy failure blocks release but allows a labelled test build'

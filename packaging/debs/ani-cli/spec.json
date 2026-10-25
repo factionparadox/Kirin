@@ -1,0 +1,23 @@
+{
+  "package": "ani-cli",
+  "version": "5.1.6+git20261022-1kirin1",
+  "architecture": "all",
+  "section": "video",
+  "depends": "curl, grep, sed, mpv, fzf, yt-dlp | ffmpeg, patch",
+  "recommends": "ffmpeg, yt-dlp",
+  "suggests": "rofi, syncplay, vlc",
+  "homepage": "https://github.com/pystardust/ani-cli",
+  "summary": "browse and watch anime from the command line",
+  "description": "A shell script to search, stream and download anime from the terminal, using mpv and fzf. Content comes from third-party websites; you are responsible for what you watch and where it is legal. Packaged for Kirin from upstream commit 0301d67d.",
+  "files": [
+    {"url": "https://raw.githubusercontent.com/pystardust/ani-cli/0301d67d5768d332b049821a30082ad43d9a215a/ani-cli",
+     "sha256": "585ecc18d36104053d55ebabde905af207ca12cca19c43d3457920925f3959be",
+     "dest": "usr/bin/ani-cli", "mode": "0755"},
+    {"url": "https://raw.githubusercontent.com/pystardust/ani-cli/0301d67d5768d332b049821a30082ad43d9a215a/ani-cli.1",
+     "sha256": "bfb698d5f98c49f1b6250deba6c78d921687874d779c482a9a5e6a57afa3d68b",
+     "dest": "usr/share/man/man1/ani-cli.1", "mode": "0644"},
+    {"url": "https://raw.githubusercontent.com/pystardust/ani-cli/0301d67d5768d332b049821a30082ad43d9a215a/LICENSE",
+     "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+     "dest": "usr/share/doc/ani-cli/copyright", "mode": "0644"}
+  ]
+}

@@ -22,6 +22,8 @@ PIPER_SHA256=${KIRIN_TEST_PIPER_SHA256:-a50cb45f355b7af1f6d758c1b360717877ba0a39
 KIWIX_INDEX=${KIRIN_TEST_KIWIX_INDEX:-https://download.kiwix.org/zim/wiktionary/}
 KIWIX_PREFIX='wiktionary_en_all_nopic_'
 RUSSIAN_DIR=/opt/kirin/russian
+PROTON_JSON=${KIRIN_TEST_PROTON_JSON:-$REPO/packaging/proton.json}
+KIRIN_REPO_URL='https://factionparadox.github.io/Kirin/apt'
 # Debian 13 archive and security signing keys (https://ftp-master.debian.org/keys.html).
 DEBIAN_KEYS=${KIRIN_TEST_DEBIAN_KEYS:-"https://ftp-master.debian.org/keys/archive-key-13.asc=04B54C3CDCA79751B16BC6B5225629DF75B188BD https://ftp-master.debian.org/keys/archive-key-13-security.asc=5E04A1E3223A19A20706E20F9904613D4CCE68C6"}
 VOICES_TSV=${KIRIN_TEST_VOICES_TSV:-$REPO/packaging/russian/voices.tsv}
@@ -144,6 +146,15 @@ mount_chroot() {
     "$REPO/packaging/extra-packages.txt" "$ROOTFS/kirin-build/"
   [ ! -f "$PAYLOADS/libfyaml-$FYAML_VERSION.tar.gz" ] ||
     install -m 0644 "$PAYLOADS/libfyaml-$FYAML_VERSION.tar.gz" "$ROOTFS/kirin-build/"
+  install -m 0755 "$REPO/scripts/build/build-debs.py" "$ROOTFS/kirin-build/build-debs.py"
+  rm -rf "$ROOTFS/kirin-build/debs"; cp -r "$REPO/packaging/debs" "$ROOTFS/kirin-build/debs"
+  rm -rf "$ROOTFS/kirin-build/proton"
+  [ ! -d "$PAYLOADS/proton" ] || cp -r "$PAYLOADS/proton" "$ROOTFS/kirin-build/proton"
+  if [ -f "$PAYLOADS/kirin-archive-keyring.gpg" ]; then
+    mkdir -p "$ROOTFS/kirin-build/kirin-repo"
+    cp "$PAYLOADS/kirin-archive-keyring.gpg" "$ROOTFS/kirin-build/kirin-repo/"
+    printf '%s\n' "$KIRIN_REPO_URL" > "$ROOTFS/kirin-build/kirin-repo/url"
+  fi
   mkdir -p "$ROOTFS/kirin-build/extra-repos"
   cp "$REPO"/packaging/apt/extra-repos/* "$ROOTFS/kirin-build/extra-repos/"
   [ ! -f "$PAYLOADS/kirin-debian.gpg" ] || cp "$PAYLOADS/kirin-debian.gpg" "$ROOTFS/kirin-build/extra-repos/"
@@ -413,12 +424,32 @@ fetch_debian_keys() {
   info 'Debian 13 signing keys verified against pinned fingerprints'
 }
 
+fetch_proton() {
+  info "fetching Proton's official VPN, Pass and Mail packages"
+  python3 "$REPO/scripts/build/fetch-proton.py" --config "$PROTON_JSON" --dest "$PAYLOADS/proton" | sed 's/^/    /'
+}
+
+# The Kirin APT repository is added once its public key is committed (docs/KIRIN-REPO.md).
+fetch_kirin_key() {
+  local key="$REPO/packaging/apt/kirin-archive-keyring.asc" fpr="$REPO/packaging/apt/kirin-archive-keyring.fingerprint"
+  rm -f "$PAYLOADS/kirin-archive-keyring.gpg"
+  if [ ! -f "$key" ] || [ ! -f "$fpr" ]; then
+    info 'Kirin APT repository not set up yet (no public key committed); Kirin packages come with the ISO only'
+    return 0
+  fi
+  python3 "$REPO/scripts/build/pgp-fingerprint.py" "$key" --expect "$(tr -d ' \n' < "$fpr")" \
+      --binary-out "$PAYLOADS/kirin-archive-keyring.gpg" | sed 's/^/    /' ||
+    die 'packaging/apt/kirin-archive-keyring.asc does not match its committed fingerprint'
+}
+
 stage_payloads() {
   log 'Fetching payloads: Ollama, the AI models, Russian learning material and compatibility sources'
   fetch_ollama
   pull_qwen
   fetch_libfyaml
   fetch_debian_keys
+  fetch_proton
+  fetch_kirin_key
   fetch_russian
 }
 
@@ -499,6 +530,8 @@ stage_customise() {
   [ -f "$PAYLOADS/libfyaml-$FYAML_VERSION.tar.gz" ] || fetch_libfyaml
   [ "$NO_RUSSIAN" -eq 1 ] || [ -f "$PAYLOADS/russian/dictionary.name" ] || fetch_russian
   [ "$NO_EXTRA_REPOS" -eq 1 ] || [ -f "$PAYLOADS/kirin-debian.gpg" ] || fetch_debian_keys
+  [ -d "$PAYLOADS/proton" ] || fetch_proton
+  fetch_kirin_key
   local olroot="$PAYLOADS/ollama-$OLLAMA_VERSION/root"
 
   # Language policy first, so dpkg path-exclusions apply to packages installed next.
@@ -508,14 +541,19 @@ stage_customise() {
 
   mount_chroot
   info 'installing base packages'; in_chroot install
-  info 'removing Token Centre, Software Store and Kylin ID'; purge_reviewed
+  info 'removing Token Centre, Software Store, Kylin ID and the openKylin AI assistant app'; purge_reviewed
   if [ "$NO_EXTRA_REPOS" -eq 0 ]; then
     info 'adding pinned Ubuntu 26.04 and Debian 13 repositories'
     in_chroot extra-repos | tee "$AUDIT/extra-repos.log" | sed 's/^/    /'
   fi
-  info 'installing extra packages (Fastfetch and others openKylin may lack)'
+  info 'installing extra packages (LibreOffice, VLC, Fastfetch and others)'
   in_chroot install-extras | tee "$AUDIT/extra-packages.log" | sed 's/^/    /'
-  info 'installing Warehouse, Flatseal, Kiwix and Alpaca system-wide'; in_chroot flatpak "$RUSSIAN_DIR"
+  info "building and installing Kirin's own packages (ani-cli)"
+  in_chroot kirin-debs | tee "$AUDIT/kirin-debs.log" | sed 's/^/    /'
+  info 'installing Proton VPN, Pass and Mail (official packages)'
+  in_chroot proton | tee "$AUDIT/proton.log" | sed 's/^/    /'
+  info 'installing Flatpak apps system-wide (Warehouse, Flatseal, Kiwix, Alpaca, Discord, Sober)'
+  in_chroot flatpak "$RUSSIAN_DIR"
   local chat_model=$QWEN_TAG
   [ "$NO_RUSSIAN" -eq 1 ] || chat_model=$TUTOR_TAG
   python3 "$REPO/scripts/build/seed-alpaca.py" --root "$ROOTFS" --model "$chat_model" | sed 's/^/    /'

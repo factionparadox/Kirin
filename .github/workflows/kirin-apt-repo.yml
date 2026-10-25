@@ -1,0 +1,90 @@
+# Builds Kirin's own .deb packages (packaging/debs) and publishes a signed APT
+# repository on GitHub Pages at https://factionparadox.github.io/Kirin/apt
+# Setup (once): see docs/KIRIN-REPO.md. Until the KIRIN_APT_SIGNING_KEY secret
+# exists, the workflow builds the packages but skips signing and publishing.
+name: Kirin APT repository
+
+on:
+  push:
+    branches: [main]
+    paths: ['packaging/debs/**', 'scripts/build/build-debs.py', '.github/workflows/kirin-apt-repo.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: kirin-apt-repo
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    env:
+      HAS_KEY: ${{ secrets.KIRIN_APT_SIGNING_KEY != '' }}
+    outputs:
+      published: ${{ steps.flag.outputs.published }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: sudo apt-get update -q && sudo apt-get install -y -q dpkg-dev apt-utils gnupg
+
+      - name: Build Kirin packages
+        run: python3 scripts/build/build-debs.py --specs packaging/debs --out site/apt/pool/main
+
+      - name: Index the repository
+        working-directory: site/apt
+        run: |
+          rm -rf pool/main/.cache
+          mkdir -p dists/stable/main/binary-amd64 dists/stable/main/binary-all
+          apt-ftparchive packages pool > dists/stable/main/binary-amd64/Packages
+          cp dists/stable/main/binary-amd64/Packages dists/stable/main/binary-all/Packages
+          for p in dists/stable/main/binary-*/Packages; do gzip -9kf "$p"; done
+          apt-ftparchive \
+            -o APT::FTPArchive::Release::Origin=Kirin \
+            -o APT::FTPArchive::Release::Label=Kirin \
+            -o APT::FTPArchive::Release::Suite=stable \
+            -o APT::FTPArchive::Release::Codename=stable \
+            -o APT::FTPArchive::Release::Architectures="amd64 all" \
+            -o APT::FTPArchive::Release::Components=main \
+            -o APT::FTPArchive::Release::Description="Kirin Linux packages" \
+            release dists/stable > dists/stable/Release
+
+      - name: Sign the repository
+        if: env.HAS_KEY == 'true'
+        working-directory: site/apt
+        env:
+          KEY: ${{ secrets.KIRIN_APT_SIGNING_KEY }}
+        run: |
+          export GNUPGHOME="$(mktemp -d)"
+          printf '%s\n' "$KEY" | gpg --batch --import
+          gpg --batch --yes --clearsign -o dists/stable/InRelease dists/stable/Release
+          gpg --batch --yes -abs -o dists/stable/Release.gpg dists/stable/Release
+          cp ../../packaging/apt/kirin-archive-keyring.asc kirin-archive-keyring.asc
+          rm -rf "$GNUPGHOME"
+
+      - name: Skip publishing (no signing key yet)
+        if: env.HAS_KEY != 'true'
+        run: echo "::notice::KIRIN_APT_SIGNING_KEY is not set; packages built but not published. See docs/KIRIN-REPO.md."
+
+      - uses: actions/upload-pages-artifact@v3
+        if: env.HAS_KEY == 'true'
+        with:
+          path: site
+
+      - id: flag
+        run: echo "published=$HAS_KEY" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    needs: build
+    if: ${{ needs.build.outputs.published == 'true' }}
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

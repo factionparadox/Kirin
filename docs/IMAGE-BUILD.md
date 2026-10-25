@@ -1,6 +1,6 @@
 # Offline image integration contract
 
-Kirin is based on openKylin 3.0. **Retain every openKylin AI model and existing AI application** while adding the independent Ollama coding model. Never delete or replace the upstream payload to reduce ISO size.
+Kirin is based on openKylin 3.0. **Retain every openKylin AI model** and the applications that use them (speech input, OCR, photo matting, search) while adding Ollama and its models. The one exception is openKylin's chat assistant app (`kylin-aiassistant`, "Xiao K"), which Kirin replaces with Alpaca; its removal is refused if it would take any model-owning package with it. Never delete or replace the upstream model payload to reduce ISO size.
 
 An eventual image builder must:
 

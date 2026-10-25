@@ -37,6 +37,12 @@ elif step == 'extra-repos':
 elif step == 'install-extras':
     assert (root / 'kirin-build/extra-packages.txt').is_file(), 'extra package list not staged'
     print('installed fastfetch from 2.0 http://archive.ubuntu.com/ubuntu')
+elif step == 'kirin-debs':
+    specs = root / 'kirin-build/debs'
+    assert (root / 'kirin-build/build-debs.py').is_file() and any(specs.glob('*/spec.json')), 'Kirin package specs not staged'
+    print('installed: ani-cli_test_all.deb')
+elif step == 'proton':
+    print('NOT AVAILABLE: Proton pass')
 elif step == 'manifest':
     print('\n'.join(f'{p}\t1' for p in pkgs))
 else:
