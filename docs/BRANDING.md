@@ -15,4 +15,4 @@ Applied to the image by `scripts/kirin-rebrand.py` and checked by the `branding`
 | Odd names | `packaging/branding/desktop-names.json` gives proper English and Russian names to launchers that don't rebrand cleanly (the OS installer, package installer, boot repair, AI assistant "Xiao K", manual and upstream community link). |
 | Fastfetch package | openKylin 3.0 does not ship Fastfetch; it is installed from `packaging/extra-packages.txt` after the pinned Ubuntu/Debian repositories are added. |
 
-Still to do: connecting openKylin's own AI assistant to Ollama needs its configuration files inspected.
+openKylin's AI assistant supports custom "private" models through Settings → AI, but stores them through its own runtime, so Kirin documents the one-time setup (`kirin-learn learn ai`) rather than writing undocumented config. Alpaca is pre-connected.
