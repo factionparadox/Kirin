@@ -19,7 +19,7 @@ The courses and books were written by people who teach Russian for a living. Tre
 
 ## The route to B2
 
-Reaching B2 takes roughly 600-700 hours of study. An hour a day gets you there in about two years; it is the daily habit that matters.
+Reaching B2 takes roughly 900-1,200 hours of study for an English speaker (Russian is one of the harder languages for us: the US Foreign Service Institute rates it at about 1,100 class hours for professional fluency). That is about three years at an hour a day, or 12-18 months at two to three hours a day. The daily habit matters more than any one session, and speaking with real people matters as much as the course: add a weekly conversation partner (language exchange or tutor) when you reach A2.
 
 * **A1:** *Между нами* Units 1-5 with the audio, FSI FAST Lessons 1-5, the A1 words (780).
 * **A2:** *Между нами* Units 6-9 and its workbooks, the rest of FSI FAST, the Peace Corps course, the A2 words. Start listening to fairy tales (`kirin-learn listen --level A2`).

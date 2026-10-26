@@ -448,7 +448,8 @@ def study_path():
     except FileNotFoundError:
         counts = {}
     print('Kirin Russian: a route from A1 to B2, using only what is on this machine.')
-    print('Roughly 600-700 hours of study in total; an hour a day gets you to B2 in about two years.\n')
+    print('Roughly 900-1,200 hours of study to B2 for an English speaker: about three years at an hour a day,\n'
+          'or 12-18 months at two to three hours a day.\n')
     for level, aim, steps in STUDY_PATH:
         c = counts.get(level)
         progress = f'   words: {c["mastered"]}/{c["total"]} mastered' if c else ''
