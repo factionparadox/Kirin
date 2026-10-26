@@ -36,6 +36,10 @@ This is the first build stage. The resulting ISO boots and installs with openKyl
 
 The build resumes where it stopped. Completed stages are skipped. `--from STAGE` redoes a stage and everything after it, and `--only STAGE` runs a single stage.
 
+**Changed only Kirin's own files?** (branding, defaults, Kirin Learn, lessons, kitty or fish settings, launchers.) After `git pull`, run with `--refresh` instead of `--from extract`: it re-applies those to the already customised image, then audits and packs, skipping every package install. Package lists, payloads and the Russian kit still need `--from extract` (or `--from payloads`).
+
+**Compression.** The root filesystem is packed with zstd by default (`--compression zstd`): it unpacks several times faster than openKylin's gzip, so the live session and installer spend less time waiting on the USB stick. The builder checks every kernel in the image supports it, and falls back to gzip if not. `--compression gzip` or `xz` choose those instead.
+
 ## Stages
 
 | Stage | What it does |

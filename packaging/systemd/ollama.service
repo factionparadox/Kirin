@@ -14,6 +14,15 @@ Environment=OLLAMA_HOST=127.0.0.1:11434
 Environment=OLLAMA_MODELS=/usr/share/ollama/.ollama/models
 # Never delete the preinstalled model blobs at startup.
 Environment=OLLAMA_NOPRUNE=1
+# Kirin tuning for one person on a laptop: keep a model in memory for 30 minutes after
+# use (no reload between questions), one model and one request at a time (the 19 GB
+# tutor and the coder never both sit in RAM), flash attention and an 8-bit KV cache
+# (less memory for long conversations, same answers in practice).
+Environment=OLLAMA_KEEP_ALIVE=30m
+Environment=OLLAMA_MAX_LOADED_MODELS=1
+Environment=OLLAMA_NUM_PARALLEL=1
+Environment=OLLAMA_FLASH_ATTENTION=1
+Environment=OLLAMA_KV_CACHE_TYPE=q8_0
 
 [Install]
 WantedBy=multi-user.target

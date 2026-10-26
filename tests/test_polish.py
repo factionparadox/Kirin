@@ -142,6 +142,15 @@ class TestPolish(unittest.TestCase):
         self.assertIn('options nvme noacpi=1\n', options)
         self.assertIn('blacklist cros-usbpd-charger\n', options)
 
+    def test_zram_only_with_generator(self):
+        quiet('--root', str(self.root), '--apply')
+        self.assertFalse((self.root / polish.ZRAM_SYSCTL).exists())     # no swappiness 180 without zram
+        gen = self.root / 'usr/lib/systemd/system-generators/zram-generator'
+        gen.parent.mkdir(parents=True); gen.write_text('')
+        quiet('--root', str(self.root), '--apply')
+        self.assertIn('zram-size = min(ram / 2, 16384)', (self.root / polish.ZRAM_CONF).read_text())
+        self.assertIn('vm.swappiness = 180', (self.root / polish.ZRAM_SYSCTL).read_text())
+
     def test_refuses_live_root(self):
         self.assertEqual(quiet('--root', '/', '--apply'), 2)
 

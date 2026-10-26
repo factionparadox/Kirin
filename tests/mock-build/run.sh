@@ -173,6 +173,18 @@ cat "$T/log2" "$T/log3" | grep -q 'SKIPPED vpn' || fail 'unreachable Proton sour
 cat "$T/log2" "$T/log3" | grep -q 'Kirin APT repository not set up yet' || fail 'missing Kirin key not reported'
 grep -q 'keeping openKylin.s live initrd' "$T/log3" || fail 'live initrd decision not reported'
 
+grep -q 'no kernel config in the image; using xz' "$T/log3" || fail 'compression fallback not reported'
+grep -q -- '-comp xz' "$T/work/filesystem.squashfs" || fail 'fallback compression not used'
+
+echo '--- 4b. --refresh re-applies Kirin files and packs with zstd when the kernel supports it'
+mkdir -p "$R/boot"; printf 'CONFIG_SQUASHFS=y\nCONFIG_SQUASHFS_ZSTD=y\n' > "$R/boot/config-7.0.0-3-generic"
+rm -f "$R/etc/kirin-release" "$R/usr/bin/kirin-learn"
+run --refresh --accept-inventory > "$T/log4b" 2>&1 || { cat "$T/log4b"; fail 'refresh failed'; }
+grep -q 'Refreshing Kirin files' "$T/log4b" && ! grep -q 'installing base packages' "$T/log4b" || fail 'refresh redid customise'
+[ -f "$R/etc/kirin-release" ] && [ -x "$R/usr/bin/kirin-learn" ] || fail 'refresh did not re-apply Kirin files'
+grep -q -- '-comp zstd -Xcompression-level 12' "$T/work/filesystem.squashfs" || fail 'zstd not used'
+printf 'CONFIG_SQUASHFS=y\n# CONFIG_SQUASHFS_ZSTD is not set\n' > "$R/boot/config-7.0.0-3-generic"
+
 echo '--- 5. a policy failure blocks release but allows a test build'
 printf 'Name[zh_CN]=Files-zh\n' >> "$R/usr/share/applications/files.desktop"
 if run --only audit > "$T/log5" 2>&1; then fail 'language failure not caught'; fi

@@ -182,6 +182,34 @@ blacklist cros-usbpd-charger
 '''
 
 
+ZRAM_CONF = 'etc/systemd/zram-generator.conf'
+ZRAM_SETTINGS = '''# Kirin: compressed swap in RAM, so a large AI model and a browser fit together.
+# Half the RAM (at most 16 GB) of zstd-compressed swap, used before any disk swap.
+[zram0]
+zram-size = min(ram / 2, 16384)
+compression-algorithm = zstd
+swap-priority = 100
+'''
+ZRAM_SYSCTL = 'etc/sysctl.d/90-kirin-zram.conf'
+ZRAM_TUNING = '''# Kirin: tuning for zram swap (only installed with systemd-zram-generator).
+# Swapping to compressed RAM is cheap, so swap earlier and read one page at a time.
+vm.swappiness = 180
+vm.page-cluster = 0
+'''
+
+
+def apply_zram(root: Path) -> list[str]:
+    generator = any((root / d / 'zram-generator').exists()
+                    for d in ('usr/lib/systemd/system-generators', 'lib/systemd/system-generators'))
+    if not generator:
+        (root / ZRAM_SYSCTL).unlink(missing_ok=True)
+        return ['zram: systemd-zram-generator not installed; left as openKylin had it']
+    for rel, text in ((ZRAM_CONF, ZRAM_SETTINGS), (ZRAM_SYSCTL, ZRAM_TUNING)):
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text(text, encoding='utf-8')
+    return ['zram: half the RAM as compressed swap (max 16 GB)']
+
+
 def apply(root: Path) -> list[str]:
     rules = root / FRAMEWORK_UDEV
     rules.parent.mkdir(parents=True, exist_ok=True)
@@ -189,7 +217,7 @@ def apply(root: Path) -> list[str]:
     modprobe = root / FRAMEWORK_MODPROBE
     modprobe.parent.mkdir(parents=True, exist_ok=True)
     modprobe.write_text(FRAMEWORK_OPTIONS, encoding='utf-8')
-    notes = apply_terminal(root)
+    notes = apply_terminal(root) + apply_zram(root)
     (root / 'etc/kirin-release').write_text(
         f'KIRIN_VERSION="{KIRIN_VERSION}"\nKIRIN_NAME="Kirin Linux"\nKIRIN_BASE="openKylin 3.0"\n', encoding='utf-8')
     (root / 'etc/hostname').write_text(HOSTNAME + '\n', encoding='utf-8')

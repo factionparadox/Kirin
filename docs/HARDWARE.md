@@ -20,6 +20,11 @@
 | Thunderbolt / USB4 | `bolt` authorises docks and devices. |
 | Kernel module options | `/etc/modprobe.d/kirin-framework.conf`: `nvme noacpi=1` (lower suspend drain) and blacklist `cros-usbpd-charger` (unused by Framework's EC; logs a boot error). Both from NixOS's Framework module. |
 
+### Memory and the local AI
+
+* **zram:** half the RAM (at most 16 GB) becomes zstd-compressed swap, used before any disk swap, with `vm.swappiness = 180` (`/etc/systemd/zram-generator.conf`, `/etc/sysctl.d/90-kirin-zram.conf`). The 19 GB Russian tutor and a browser fit together on a 32 GB machine without stalling. Check with `zramctl` and `swapon --show`.
+* **Ollama** (`/etc/systemd/system/ollama.service`): a model stays loaded for 30 minutes after use, so only the first question waits for it to load; one model and one request at a time; flash attention with an 8-bit KV cache for less memory per conversation. Ollama picks the CPU thread count itself.
+
 ### Packages taken from Ubuntu when newer
 
 `packaging/prefer-ubuntu.txt` lists hardware data packages (`alsa-ucm-conf`, `alsa-topology-conf`, `intel-microcode`, `thermald`, `wireless-regdb`). For each, the build uses Ubuntu 26.04's version only when its upstream version is newer than openKylin's and nothing else would come from Ubuntu with it, then pins that package to Ubuntu so it keeps getting Ubuntu's updates. `work/audit/prefer-ubuntu.log` shows each decision. Everything else stays openKylin's.

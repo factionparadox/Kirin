@@ -45,6 +45,7 @@ MIN_FREE_GB=${KIRIN_MIN_FREE_GB:-70}
 ISO='' ISO_SHA256='' WORK="$PWD/work" OUT="$PWD/out" SQUASHFS_REL=''
 MODEL_INVENTORY='' ACCEPT_INVENTORY=0 TEST_BUILD=0 FROM='' ONLY='' NO_RUSSIAN=0 KIWIX_NAME='' NO_EXTRA_REPOS=0
 RU_WIKIPEDIA=mini
+SQUASHFS_COMP=zstd REFRESH=0
 OLLAMA_VERSION=$OLLAMA_VERSION_DEFAULT
 ALLOW_REMOVAL=()
 
@@ -73,6 +74,10 @@ Options:
   --kiwix-name FILE       Pin the Wiktionary ZIM (e.g. ${KIWIX_PREFIX}2026-09.zim) instead of the newest
   --ru-wikipedia KIND     Russian Wikipedia ZIM: mini (default: every article's introduction, a few GB),
                           nopic (full articles, ~10 GB), maxi (with pictures, ~30 GB) or none
+  --compression KIND      Root filesystem compression: zstd (default; faster live boot and install,
+                          used only if the image's kernel supports it), gzip (as openKylin) or xz
+  --refresh               Re-apply Kirin's own files, branding and defaults to the already
+                          customised image, then audit and pack (skips reinstalling packages)
   --test-build            Produce an ISO even if policy audits fail (they are listed in its .build.json).
                           The AI-model contract is never relaxed.
   --from STAGE            Re-run from STAGE onwards
@@ -96,6 +101,10 @@ while [ $# -gt 0 ]; do
     --no-russian) NO_RUSSIAN=1; shift ;;
     --no-extra-repos) NO_EXTRA_REPOS=1; shift ;;
     --kiwix-name) KIWIX_NAME=$2; shift 2 ;;
+    --compression)
+      case "$2" in zstd|gzip|xz) SQUASHFS_COMP=$2 ;; *) echo '--compression takes zstd, gzip or xz' >&2; exit 2 ;; esac
+      shift 2 ;;
+    --refresh) REFRESH=1; shift ;;
     --ru-wikipedia)
       case "$2" in nopic|maxi|mini|none) RU_WIKIPEDIA=$2 ;; *) echo '--ru-wikipedia takes nopic, maxi, mini or none' >&2; exit 2 ;; esac
       shift 2 ;;
@@ -633,6 +642,21 @@ stage_customise() {
     info 'language tool reported problems; the audit stage will show them'
   DESTDIR="$ROOTFS" sh "$REPO/scripts/stage-account-policy.sh"
 
+  # The big payloads go in before the chroot mounts: while the image is bind-mounted
+  # onto itself, hard links into it fail and ~40 GB would be copied instead.
+  info 'installing Ollama and the AI models'
+  install -d -m 0755 "$ROOTFS/usr/local/bin" "$ROOTFS/usr/local/lib"
+  install -m 0755 "$olroot/bin/ollama" "$ROOTFS/usr/local/bin/ollama"
+  rm -rf "$ROOTFS/usr/local/lib/ollama"
+  [ ! -d "$olroot/lib/ollama" ] || cp -a "$olroot/lib/ollama" "$ROOTFS/usr/local/lib/ollama"
+  install -D -m 0644 "$REPO/packaging/systemd/ollama.service" "$ROOTFS/etc/systemd/system/ollama.service"
+  local dest="$ROOTFS/usr/share/ollama/.ollama/models"
+  rm -rf "$dest"; mkdir -p "$dest"
+  cp -al "$PAYLOADS/models/." "$dest/" 2>/dev/null || { rm -rf "$dest"; mkdir -p "$dest"; cp -a "$PAYLOADS/models/." "$dest/"; }
+  install -D -m 0644 "$PAYLOADS/qwen-blobs.json" "$ROOTFS/usr/share/kirin/qwen-blobs.json"
+  install -D -m 0644 "$UPSTREAM/upstream-models.json" "$ROOTFS/usr/share/kirin/upstream-models.json"
+  install_russian
+
   mount_chroot
   info 'installing base packages'; in_chroot install
   info 'removing Token Centre, Software Store, Kylin ID, WPS Office and the openKylin AI assistant app'; purge_reviewed
@@ -660,20 +684,12 @@ stage_customise() {
   [ "$NO_RUSSIAN" -eq 1 ] || chat_model=$TUTOR_TAG
   python3 "$REPO/scripts/build/seed-alpaca.py" --root "$ROOTFS" --model "$chat_model" | sed 's/^/    /'
 
-  info 'installing Ollama and the coding model'
-  install -d -m 0755 "$ROOTFS/usr/local/bin" "$ROOTFS/usr/local/lib"
-  install -m 0755 "$olroot/bin/ollama" "$ROOTFS/usr/local/bin/ollama"
-  rm -rf "$ROOTFS/usr/local/lib/ollama"
-  [ ! -d "$olroot/lib/ollama" ] || cp -a "$olroot/lib/ollama" "$ROOTFS/usr/local/lib/ollama"
-  install -D -m 0644 "$REPO/packaging/systemd/ollama.service" "$ROOTFS/etc/systemd/system/ollama.service"
-  local dest="$ROOTFS/usr/share/ollama/.ollama/models"
-  rm -rf "$dest"; mkdir -p "$dest"
-  cp -al "$PAYLOADS/models/." "$dest/" 2>/dev/null || cp -a "$PAYLOADS/models/." "$dest/"
-  install -D -m 0644 "$PAYLOADS/qwen-blobs.json" "$ROOTFS/usr/share/kirin/qwen-blobs.json"
-  install -D -m 0644 "$UPSTREAM/upstream-models.json" "$ROOTFS/usr/share/kirin/upstream-models.json"
+  apply_kirin_layer
+  info 'customisation complete'
+}
 
-  install_russian
-
+# Kirin's own files, branding and defaults, then the in-chroot finish. Expects the chroot mounted.
+apply_kirin_layer() {
   info 'installing Kirin Learn'
   DESTDIR="$ROOTFS" sh "$REPO/scripts/install-education.sh"
 
@@ -691,7 +707,15 @@ stage_customise() {
     info 'language tool reported problems; the audit stage will show them'
   python3 "$REPO/scripts/kirin-rebrand.py" --root "$ROOTFS" --apply >/dev/null
   prepare_live_initrd
-  info 'customisation complete'
+}
+
+# --refresh: re-apply the Kirin layer to an already customised image (no package installs).
+stage_refresh() {
+  log 'Refreshing Kirin files, branding and defaults'
+  [ -f "$WORK/.done-customise" ] || die 'nothing to refresh: run the customise stage first'
+  mount_chroot
+  apply_kirin_layer
+  info 'refresh complete'
 }
 
 stage_audit() {
@@ -723,17 +747,37 @@ stage_audit() {
   return 0
 }
 
+# zstd unpacks several times faster than gzip, so the live session and installer
+# wait less on the USB stick. Used only if every kernel in the image can read it.
+choose_compression() {
+  local upstream; upstream=$(sed -n 's/^Compression //p' "$UPSTREAM/squashfs.info")
+  upstream=${upstream:-gzip}
+  [ "$SQUASHFS_COMP" != "$upstream" ] || { echo "$upstream"; return; }
+  local option cfg found=0
+  option="CONFIG_SQUASHFS_$(printf '%s' "$SQUASHFS_COMP" | tr '[:lower:]' '[:upper:]')=y"
+  for cfg in "$ROOTFS"/boot/config-*; do
+    [ -f "$cfg" ] || continue
+    found=1
+    grep -qx "$option" "$cfg" || { info "kernel $(basename "$cfg") lacks $option; using $upstream" >&2; echo "$upstream"; return; }
+  done
+  if [ "$found" -eq 0 ]; then info "no kernel config in the image; using $upstream" >&2; echo "$upstream"; return; fi
+  echo "$SQUASHFS_COMP"
+}
+
 stage_pack() {
   log 'Packing the root filesystem and ISO'
   [ -s "$AUDIT/summary" ] || die 'run the audit stage first'
   if grep -q '^FAIL' "$AUDIT/summary" && [ "$TEST_BUILD" -ne 1 ]; then die 'audits failed; refusing to pack'; fi
   SQUASHFS_REL=$(cat "$UPSTREAM/squashfs.path")
   local comp bs
-  comp=$(sed -n 's/^Compression //p' "$UPSTREAM/squashfs.info")
+  comp=$(choose_compression)
   bs=$(sed -n 's/^Block size //p' "$UPSTREAM/squashfs.info")
   local sq="$WORK/filesystem.squashfs"
+  local -a level=()
+  [ "$comp" != zstd ] || level=(-Xcompression-level 12)
+  info "compression: $comp"
   rm -f "$sq"
-  mksquashfs "$ROOTFS" "$sq" -noappend -comp "${comp:-xz}" ${bs:+-b "$bs"} -wildcards \
+  mksquashfs "$ROOTFS" "$sq" -noappend -comp "$comp" "${level[@]}" ${bs:+-b "$bs"} -wildcards \
     -e 'proc/*' 'sys/*' 'dev/*' 'run/*' 'tmp/*'
 
   local -a maps=(-map "$sq" "/$SQUASHFS_REL")
@@ -871,7 +915,13 @@ if [ -n "$FROM" ]; then
   drop=0; for s in "${STAGES[@]}"; do [ "$s" = "$FROM" ] && drop=1; [ "$drop" -eq 1 ] && rm -f "$WORK/.done-$s"; done
 fi
 
+if [ "$REFRESH" -eq 1 ]; then
+  [ -z "$ONLY" ] || die '--refresh cannot be combined with --only'
+  rm -f "$WORK/.done-audit" "$WORK/.done-pack"
+fi
+
 for s in "${STAGES[@]}"; do
+  if [ "$REFRESH" -eq 1 ] && [ "$s" = audit ]; then stage_refresh; fi
   if [ -n "$ONLY" ] && [ "$s" != "$ONLY" ] && [ "$s" != preflight ]; then continue; fi
   if [ -z "$ONLY" ] && [ "$s" != preflight ] && [ -f "$WORK/.done-$s" ]; then
     info "skipping $s (done; use --from $s to redo)"; continue

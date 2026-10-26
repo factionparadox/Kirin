@@ -32,6 +32,8 @@ mesa-vulkan-drivers
 intel-microcode
 thermald
 power-profiles-daemon
+# Compressed swap in RAM (configured by kirin-polish.py): room for the 19 GB tutor model
+systemd-zram-generator
 # Thunderbolt/USB4 device authorisation; Wi-Fi 6 GHz regulatory database
 bolt
 wireless-regdb
