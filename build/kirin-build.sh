@@ -824,6 +824,10 @@ PY
   if grep -q '^FAIL' "$AUDIT/summary"; then
     info "audits that did not pass: $(awk '$1 == "FAIL" {print $2}' "$AUDIT/summary" | tr '\n' ' ')(see $AUDIT)"
   fi
+  # The build runs under sudo; give the finished files to the user who ran it.
+  if [ -n "${SUDO_UID:-}" ] && [ -n "${SUDO_GID:-}" ]; then
+    chown "$SUDO_UID:$SUDO_GID" "$OUT" "$iso_out" "$iso_out.sha256" "$OUT/$(basename "$iso_out" .iso).build.json" 2>/dev/null || true
+  fi
   local bytes; bytes=$(stat -c %s "$iso_out")
   info "size: $((bytes / 1000000000)) GB ($bytes bytes)"
   # A "64 GB" USB stick holds about 61.5 GB, less Ventoy's own partition.
