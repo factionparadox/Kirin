@@ -316,13 +316,20 @@ case "$step" in
       for prof in /usr/share/pam-configs/*; do
         if [ -f "$prof" ] && grep -qi 'biometric' "$prof"; then pam-auth-update --package --remove "$(basename "$prof")"; fi
       done
-      pam-auth-update --package --enable fprintd || true
+      # openKylin's common-auth counts as locally edited, so plain --package leaves it alone;
+      # --force regenerates it from the profiles (with the biometric one removed above).
+      pam-auth-update --package --force --enable fprintd || true
       for unit in $(systemctl list-unit-files --no-legend 'biometric*' 2>/dev/null | awk '{print $1}'); do
         systemctl mask "$unit" >/dev/null 2>&1 && echo "masked $unit"
       done
       if grep -q 'pam_biometric' /etc/pam.d/common-auth; then
         sed -i '/pam_biometric\.so/d' /etc/pam.d/common-auth
         echo 'FINGERPRINT: removed a leftover pam_biometric line from common-auth'
+      fi
+      if ! grep -q 'pam_fprintd' /etc/pam.d/common-auth; then
+        # Last resort: put fprintd in front of the password check, skipping it and pam_deny on success.
+        sed -i '0,/^auth\s.*pam_unix\.so/s//auth\t[success=2 default=ignore]\tpam_fprintd.so max-tries=1 timeout=10\n&/' /etc/pam.d/common-auth
+        echo 'FINGERPRINT: added pam_fprintd to common-auth by hand'
       fi
       grep -q 'pam_fprintd' /etc/pam.d/common-auth || echo 'FINGERPRINT WARNING: pam_fprintd is not in common-auth'
       echo 'FINGERPRINT: fprintd enabled for login, lock screen and sudo'
