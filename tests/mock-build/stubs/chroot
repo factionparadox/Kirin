@@ -37,6 +37,12 @@ elif step == 'extra-repos':
 elif step == 'install-extras':
     assert (root / 'kirin-build/extra-packages.txt').is_file(), 'extra package list not staged'
     print('installed fastfetch from 2.0 http://archive.ubuntu.com/ubuntu')
+elif step == 'zfs':
+    k = root / 'lib/modules/7.0.0-3-generic/updates/dkms'; k.mkdir(parents=True, exist_ok=True)
+    (k / 'zfs.ko.zst').write_bytes(b'module')
+    for tool in ('zpool', 'zfs'):
+        t = root / 'usr/sbin' / tool; t.write_text('#!/bin/sh\n'); t.chmod(0o755)
+    print('ZFS_MODULE 7.0.0-3-generic'); print('ZFS: OpenZFS 2.4.1 ready (zfs-2.4.1)')
 elif step == 'pin-extras':
     print('from Ubuntu: fprintd'); print('1 packages from the extra repositories pinned for updates')
 elif step == 'prefer-ubuntu':

@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# kirin-be: Kirin boot environments on an OpenZFS root (ZFSBootMenu).
+#
+#   kirin-be list                      boot environments and their snapshots
+#   kirin-be snapshot [NAME]           snapshot the running system (default: manual-DATE)
+#   kirin-be create NAME [SNAPSHOT]    new boot environment from a snapshot (default: now)
+#   kirin-be activate NAME             boot NAME by default from now on
+#   kirin-be rollback SNAPSHOT         make a boot environment from SNAPSHOT and activate it
+#   kirin-be destroy NAME              delete a boot environment (not the running or default one)
+#
+# Nothing is ever rolled back in place: going back creates a new boot environment, so the
+# current system stays bootable. ZFSBootMenu can also boot any snapshot from its menu.
+set -Eeuo pipefail
+
+die() { printf 'kirin-be: %s\n' "$*" >&2; exit 1; }
+need_root() { [ "$(id -u)" -eq 0 ] || die "this changes the system; run: sudo kirin-be $*"; }
+
+[ "$(findmnt -no FSTYPE /)" = zfs ] || die 'the running system is not on ZFS (installed with kirin-zfs-install?)'
+ROOT_DS=$(findmnt -no SOURCE /)              # e.g. zroot/ROOT/kirin
+PARENT=${ROOT_DS%/*}                         # zroot/ROOT
+POOL=${ROOT_DS%%/*}
+BOOTFS=$(zpool get -Ho value bootfs "$POOL")
+
+valid_name() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || die "invalid name: $1"; }
+be() { case "$1" in */*) echo "$1" ;; *) echo "$PARENT/$1" ;; esac; }
+snap_of() {   # full snapshot name: NAME, BE@NAME or POOL/ROOT/BE@NAME
+  case "$1" in
+    */*@*) echo "$1" ;;
+    *@*) echo "$PARENT/$1" ;;
+    *) echo "$ROOT_DS@$1" ;;
+  esac
+}
+
+cmd=${1:-list}; shift || true
+case "$cmd" in
+  list)
+    printf 'Boot environments (in %s):\n' "$PARENT"
+    zfs list -H -d 1 -o name,used,creation "$PARENT" | while IFS=$'\t' read -r name used created; do
+      [ "$name" = "$PARENT" ] && continue
+      tags=''
+      [ "$name" = "$ROOT_DS" ] && tags="$tags running"
+      [ "$name" = "$BOOTFS" ] && tags="$tags default"
+      printf '  %-24s %8s  %s%s\n' "${name##*/}" "$used" "$created" "${tags:+  [${tags# }]}"
+    done
+    echo
+    printf 'Snapshots of %s (newest last):\n' "${ROOT_DS##*/}"
+    zfs list -H -t snapshot -o name,used,creation -s creation "$ROOT_DS" |
+      while IFS=$'\t' read -r name used created; do printf '  %-32s %8s  %s\n' "${name#*@}" "$used" "$created"; done
+    ;;
+  snapshot)
+    need_root snapshot "$@"
+    name=${1:-manual-$(date +%Y%m%d-%H%M%S)}; valid_name "$name"
+    zfs snapshot "$ROOT_DS@$name"
+    echo "snapshot: ${ROOT_DS##*/}@$name"
+    ;;
+  create)
+    need_root create "$@"
+    [ $# -ge 1 ] || die 'usage: kirin-be create NAME [SNAPSHOT]'
+    valid_name "$1"; target=$(be "$1")
+    zfs list "$target" >/dev/null 2>&1 && die "$1 already exists"
+    if [ $# -ge 2 ]; then snap=$(snap_of "$2"); else snap="$ROOT_DS@be-$1-$(date +%Y%m%d-%H%M%S)"; zfs snapshot "$snap"; fi
+    zfs list "$snap" >/dev/null 2>&1 || die "no such snapshot: $snap"
+    # canmount=noauto is essential: two datasets mounting at / would stop the system booting.
+    zfs clone -o mountpoint=/ -o canmount=noauto "$snap" "$target"
+    echo "boot environment $1 created from ${snap#"$PARENT"/}"
+    echo "Boot it once from the ZFSBootMenu menu, or make it the default: sudo kirin-be activate $1"
+    ;;
+  activate)
+    need_root activate "$@"
+    [ $# -eq 1 ] || die 'usage: kirin-be activate NAME'
+    target=$(be "$1"); zfs list "$target" >/dev/null 2>&1 || die "no such boot environment: $1"
+    zpool set bootfs="$target" "$POOL"
+    echo "$1 will start by default from the next restart."
+    ;;
+  rollback)
+    need_root rollback "$@"
+    [ $# -eq 1 ] || die 'usage: kirin-be rollback SNAPSHOT'
+    snap=$(snap_of "$1"); zfs list "$snap" >/dev/null 2>&1 || die "no such snapshot: $snap"
+    name="rollback-$(date +%Y%m%d-%H%M%S)"
+    zfs clone -o mountpoint=/ -o canmount=noauto "$snap" "$PARENT/$name"
+    zpool set bootfs="$PARENT/$name" "$POOL"
+    echo "Created boot environment $name from ${snap#"$PARENT"/} and made it the default."
+    echo "Restart to use it. Your current system (${ROOT_DS##*/}) is untouched and still in the boot menu."
+    ;;
+  destroy)
+    need_root destroy "$@"
+    [ $# -eq 1 ] || die 'usage: kirin-be destroy NAME'
+    target=$(be "$1")
+    [ "$target" != "$ROOT_DS" ] || die "$1 is the running system"
+    [ "$target" != "$BOOTFS" ] || die "$1 is the default; activate another one first"
+    zfs list "$target" >/dev/null 2>&1 || die "no such boot environment: $1"
+    zfs destroy "$target" || die "$1 has snapshots other boot environments were made from; destroy those first"
+    echo "destroyed $1"
+    ;;
+  -h|--help|help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *) die "unknown command: $cmd (try kirin-be help)" ;;
+esac

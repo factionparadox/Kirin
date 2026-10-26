@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Install Kirin on ZFS
+Name[ru]=Установить Kirin на ZFS
+Comment=Install with an OpenZFS root, snapshots and ZFSBootMenu (erases the chosen disk)
+Comment[ru]=Установка с корнем OpenZFS, снимками и ZFSBootMenu (стирает выбранный диск)
+Exec=sudo kirin-zfs-install
+Icon=drive-harddisk
+Terminal=true
+Categories=System;

@@ -1,0 +1,3 @@
+// Kirin: on an OpenZFS root, snapshot the system before every package change
+// (see kirin-be list). Does nothing on other filesystems and never blocks APT.
+DPkg::Pre-Invoke { "if [ -x /usr/lib/kirin/zfs-apt-snapshot ]; then /usr/lib/kirin/zfs-apt-snapshot; fi"; };

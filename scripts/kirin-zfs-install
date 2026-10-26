@@ -1,0 +1,247 @@
+#!/usr/bin/env bash
+# kirin-zfs-install: install Kirin from the live USB onto a whole disk, with an OpenZFS
+# root (optionally encrypted), a separate /home dataset and ZFSBootMenu as the boot loader.
+#
+# Follows ZFSBootMenu's Ubuntu UEFI guide (docs.zfsbootmenu.org). Erases the chosen disk.
+# Run from the Kirin live session:  sudo kirin-zfs-install
+#
+#   --disk DEV               disk to erase and install to (otherwise you choose from a list)
+#   --username NAME          first user (asked if not given)   --fullname "Full Name"
+#   --password-file FILE     the user's password, first line   (otherwise asked)
+#   --encrypt-passphrase-file FILE | --no-encrypt               (otherwise asked)
+#   --hostname NAME          (default: kirin)
+#   --source PATH            squashfs or directory to install (default: the live image)
+#   --yes                    skip the "type the disk name" confirmation
+#   --dry-run                print every command instead of running it
+set -Eeuo pipefail
+
+POOL=zroot BE=kirin MNT=/mnt/kirin-target ZBM_DIR=/usr/share/kirin/zfsbootmenu
+DISK='' USERNAME='' FULLNAME='' PASSWORD_FILE='' ENC_FILE='' ENCRYPT='' HOST=kirin SOURCE='' YES=0 DRY=0
+KEYFILE=/etc/zfs/$POOL.key
+
+die() { printf '\nkirin-zfs-install: %s\n' "$*" >&2; exit 1; }
+say() { printf '\n==> %s\n' "$*"; }
+run() { if [ "$DRY" -eq 1 ]; then printf '+ %s\n' "$*"; else "$@"; fi; }
+in_target() { run chroot "$MNT" "$@"; }
+usage() { sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; }
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --disk) DISK=$2; shift 2 ;;
+    --username) USERNAME=$2; shift 2 ;;
+    --fullname) FULLNAME=$2; shift 2 ;;
+    --password-file) PASSWORD_FILE=$2; shift 2 ;;
+    --encrypt-passphrase-file) ENC_FILE=$2; ENCRYPT=1; shift 2 ;;
+    --no-encrypt) ENCRYPT=0; shift ;;
+    --hostname) HOST=$2; shift 2 ;;
+    --source) SOURCE=$2; shift 2 ;;
+    --yes) YES=1; shift ;;
+    --dry-run) DRY=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) usage >&2; exit 2 ;;
+  esac
+done
+
+# Partition N of a disk: /dev/sda -> /dev/sda1, /dev/nvme0n1 -> /dev/nvme0n1p1
+part() { case "$1" in *[0-9]) echo "${1}p$2" ;; *) echo "$1$2" ;; esac; }
+
+valid_user() { [[ "$1" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] && [ "$1" != root ]; }
+valid_host() { [[ "$1" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$ ]]; }
+
+ask_secret() {   # ask_secret PROMPT MINLEN -> prints the secret
+  local a b
+  while :; do
+    read -rsp "$1: " a || die 'no input'; echo >&2
+    read -rsp 'Again: ' b || die 'no input'; echo >&2
+    if [ "$a" != "$b" ]; then echo 'They did not match; try again.' >&2
+    elif [ "${#a}" -lt "$2" ]; then echo "Use at least $2 characters." >&2
+    else printf '%s' "$a"; return; fi
+  done
+}
+
+live_medium_disk() {
+  local src
+  for m in /cdrom /run/live/medium /isodevice; do
+    src=$(findmnt -no SOURCE "$m" 2>/dev/null) || continue
+    [ -n "$src" ] && lsblk -no PKNAME "$src" 2>/dev/null | head -1 && return
+  done
+}
+
+# ------------------------------------------------------------------ checks
+if [ "$DRY" -eq 0 ]; then
+  [ "$(id -u)" -eq 0 ] || die 'run with sudo'
+  [ -d /sys/firmware/efi ] || die 'this computer did not start in UEFI mode; ZFSBootMenu needs UEFI'
+  grep -qw 'boot=casper' /proc/cmdline || [ -d /cdrom/casper ] ||
+    die 'run this from the Kirin live USB, not an installed system'
+  command -v zpool >/dev/null && modprobe zfs 2>/dev/null ||
+    die 'OpenZFS is not available in this image (see the zfs audit in the build)'
+  for t in sgdisk mkfs.vfat efibootmgr unsquashfs wipefs partprobe udevadm; do
+    command -v "$t" >/dev/null || die "missing tool: $t"
+  done
+  zpool list "$POOL" >/dev/null 2>&1 && die "a pool called $POOL is already imported; export it first"
+fi
+[ -f "$ZBM_DIR/VMLINUZ.EFI" ] || [ "$DRY" -eq 1 ] || die "ZFSBootMenu is missing from $ZBM_DIR"
+
+if [ -z "$SOURCE" ]; then
+  for s in /cdrom/casper/filesystem.squashfs /run/live/medium/casper/filesystem.squashfs /rofs; do
+    [ -e "$s" ] && { SOURCE=$s; break; }
+  done
+  [ -n "$SOURCE" ] || { [ "$DRY" -eq 1 ] && SOURCE=/cdrom/casper/filesystem.squashfs; } || die 'cannot find the live image to install'
+fi
+
+# ------------------------------------------------------------------ questions
+echo 'Kirin ZFS installer: OpenZFS root, separate /home, ZFSBootMenu boot loader.'
+echo 'The disk you choose will be ERASED completely.'
+
+if [ -z "$DISK" ]; then
+  live=$(live_medium_disk || true)
+  mapfile -t disks < <(lsblk -dpno NAME,TYPE,SIZE,MODEL | awk '$2 == "disk" {print}' |
+                       grep -v -E '/dev/(loop|zram|sr)' | { if [ -n "$live" ]; then grep -v "^/dev/$live "; else cat; fi })
+  [ ${#disks[@]} -gt 0 ] || die 'no disks found (the live USB itself is never offered)'
+  echo; for i in "${!disks[@]}"; do printf '  %d) %s\n' $((i + 1)) "${disks[$i]}"; done
+  read -rp 'Install to which disk (number)? ' n || n=''
+  [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -ge 1 ] && [ "$n" -le ${#disks[@]} ] || die 'no disk chosen'
+  DISK=$(awk '{print $1}' <<< "${disks[$((n - 1))]}")
+fi
+[ "$DRY" -eq 1 ] || [ -b "$DISK" ] || die "$DISK is not a disk"
+
+until [ -n "$USERNAME" ] && valid_user "$USERNAME"; do
+  [ -z "$USERNAME" ] || echo 'Use lower-case letters, digits, - and _ (not root).'
+  read -rp 'Your user name (e.g. stephen): ' USERNAME || die 'no user name given'
+done
+[ -n "$FULLNAME" ] || read -rp 'Your full name (optional): ' FULLNAME || true
+valid_host "$HOST" || die "invalid host name: $HOST"
+if [ -n "$PASSWORD_FILE" ]; then PASSWORD=$(head -1 "$PASSWORD_FILE"); else PASSWORD=$(ask_secret "Password for $USERNAME" 1); fi
+[ -n "$PASSWORD" ] || die 'empty password'
+
+if [ -z "$ENCRYPT" ]; then
+  read -rp 'Encrypt the disk? You will type a passphrase at every start-up. [y/N] ' a || a=n
+  case "$a" in [yY]*) ENCRYPT=1 ;; *) ENCRYPT=0 ;; esac
+fi
+if [ "$ENCRYPT" -eq 1 ]; then
+  if [ -n "$ENC_FILE" ]; then PASSPHRASE=$(head -1 "$ENC_FILE"); else PASSPHRASE=$(ask_secret 'Disk encryption passphrase' 8); fi
+  [ "${#PASSPHRASE}" -ge 8 ] || die 'the encryption passphrase must be at least 8 characters'
+fi
+
+ESP=$(part "$DISK" 1) ZPART=$(part "$DISK" 2)
+cat <<EOF
+
+  Disk:        $DISK (ERASED)
+  Partitions:  $ESP  1 GB EFI system partition
+               $ZPART  the rest: ZFS pool "$POOL"
+  Datasets:    $POOL/ROOT/$BE  (/)   $POOL/home  (/home)
+  Encryption:  $([ "$ENCRYPT" -eq 1 ] && echo 'yes (aes-256-gcm, passphrase at start-up)' || echo no)
+  User:        $USERNAME${FULLNAME:+ ($FULLNAME)}, administrator
+  Host name:   $HOST
+  Installing:  $SOURCE
+
+EOF
+if [ "$YES" -ne 1 ]; then
+  read -rp "Type $(basename "$DISK") to erase it and install: " confirm || confirm=''
+  [ "$confirm" = "$(basename "$DISK")" ] || die 'not confirmed; nothing was changed'
+fi
+
+trap 'echo; echo "kirin-zfs-install: stopped at line $LINENO. The disk may be half-installed; run the installer again to start over." >&2' ERR
+
+# ------------------------------------------------------------------ disk
+say 'Erasing the disk and creating partitions'
+run zpool labelclear -f "$DISK" 2>/dev/null || true
+run wipefs -a "$DISK"
+run sgdisk --zap-all "$DISK"
+run sgdisk -n 1:1m:+1g -t 1:ef00 -c 1:EFI "$DISK"
+run sgdisk -n 2:0:-10m -t 2:bf00 -c 2:"$POOL" "$DISK"
+run partprobe "$DISK" || true
+run udevadm settle
+run mkfs.vfat -F 32 -n KIRIN-EFI "$ESP"
+
+say 'Creating the ZFS pool and datasets'
+encopts=()
+if [ "$ENCRYPT" -eq 1 ]; then
+  run install -d -m 0755 /etc/zfs
+  if [ "$DRY" -eq 1 ]; then echo "+ (write the passphrase to $KEYFILE, mode 000)"
+  else (umask 077; printf '%s' "$PASSPHRASE" > "$KEYFILE"); chmod 000 "$KEYFILE"; fi
+  encopts=(-O encryption=aes-256-gcm -O keylocation="file://$KEYFILE" -O keyformat=passphrase)
+fi
+# compatibility=openzfs-2.3-linux keeps the pool readable by ZFSBootMenu's own OpenZFS.
+run zpool create -f -o ashift=12 -o autotrim=on -o compatibility=openzfs-2.3-linux \
+  -O compression=zstd -O acltype=posixacl -O xattr=sa -O relatime=on -O dnodesize=auto \
+  "${encopts[@]}" -m none "$POOL" "$ZPART"
+run zfs create -o mountpoint=none "$POOL/ROOT"
+run zfs create -o mountpoint=/ -o canmount=noauto "$POOL/ROOT/$BE"
+run zfs create -o mountpoint=/home "$POOL/home"
+run zpool set bootfs="$POOL/ROOT/$BE" "$POOL"
+run zpool export "$POOL"
+run zpool import -N -R "$MNT" "$POOL"
+[ "$ENCRYPT" -eq 0 ] || run zfs load-key "$POOL"
+run zfs mount "$POOL/ROOT/$BE"
+run zfs mount "$POOL/home"
+
+say "Copying Kirin onto the disk (this takes a while)"
+if [ -d "$SOURCE" ]; then
+  run rsync -aHAXx --info=progress2 "$SOURCE/" "$MNT/"
+else
+  run unsquashfs -f -d "$MNT" "$SOURCE"
+fi
+
+say 'Configuring the installed system'
+run install -d -m 0755 "$MNT/etc/zfs" "$MNT/boot/efi"
+run zpool set cachefile=/etc/zfs/zpool.cache "$POOL"
+run cp /etc/zfs/zpool.cache "$MNT/etc/zfs/zpool.cache"
+if [ "$ENCRYPT" -eq 1 ]; then
+  run cp -p "$KEYFILE" "$MNT$KEYFILE"
+  run install -D -m 0644 /dev/null "$MNT/etc/initramfs-tools/conf.d/umask.conf"
+  if [ "$DRY" -eq 1 ]; then echo "+ echo UMASK=0077 > $MNT/etc/initramfs-tools/conf.d/umask.conf"
+  else echo 'UMASK=0077' > "$MNT/etc/initramfs-tools/conf.d/umask.conf"; fi
+  # ZFSBootMenu asks for the passphrase once and hands the key to the kernel it boots.
+  run zfs set org.zfsbootmenu:keysource="$POOL/ROOT/$BE" "$POOL"
+fi
+run zfs set org.zfsbootmenu:commandline="quiet splash" "$POOL/ROOT"
+if [ "$DRY" -eq 1 ]; then
+  echo "+ (write $MNT/etc/hostname, hosts and fstab with the EFI partition)"
+else
+  echo "$HOST" > "$MNT/etc/hostname"
+  sed -i '/^127\.0\.1\.1\s/d' "$MNT/etc/hosts"; printf '127.0.1.1\t%s\n' "$HOST" >> "$MNT/etc/hosts"
+  printf 'UUID=%s /boot/efi vfat umask=0077 0 1\n' "$(blkid -s UUID -o value "$ESP")" >> "$MNT/etc/fstab"
+  [ ! -L /etc/localtime ] || ln -sf "$(readlink /etc/localtime)" "$MNT/etc/localtime"
+fi
+run mount "$ESP" "$MNT/boot/efi"
+for d in dev proc sys run; do run mount --rbind "/$d" "$MNT/$d"; run mount --make-rslave "$MNT/$d"; done
+
+# Live-session-only packages (the casper list), then the first user.
+if [ -f /cdrom/casper/filesystem.manifest-remove ]; then
+  # shellcheck disable=SC2046
+  in_target apt-get purge -y -q $(grep -v -E '^(zfs|libzfs|libzpool|libnvpair|libuutil)' /cdrom/casper/filesystem.manifest-remove | awk '{print $1}') || true
+else
+  in_target apt-get purge -y -q casper || true
+fi
+groups=$(for g in sudo adm lpadmin plugdev netdev video render audio dip; do
+           chroot "$MNT" getent group "$g" >/dev/null 2>&1 && printf '%s,' "$g"; done 2>/dev/null || true)
+in_target useradd -m -s /bin/bash -c "$FULLNAME" ${groups:+-G "${groups%,}"} "$USERNAME"
+if [ "$DRY" -eq 1 ]; then echo "+ (set the password for $USERNAME)"
+else printf '%s:%s\n' "$USERNAME" "$PASSWORD" | chroot "$MNT" chpasswd; fi
+run rm -f "$MNT/usr/share/applications/kirin-zfs-install.desktop"
+
+in_target systemctl enable zfs.target zfs-import-cache.service zfs-mount.service zfs-import.target
+in_target update-initramfs -u -k all
+
+say 'Installing ZFSBootMenu'
+run install -d "$MNT/boot/efi/EFI/ZBM" "$MNT/boot/efi/EFI/BOOT"
+run cp "$ZBM_DIR/VMLINUZ.EFI" "$MNT/boot/efi/EFI/ZBM/VMLINUZ.EFI"
+run cp "$ZBM_DIR/VMLINUZ.EFI" "$MNT/boot/efi/EFI/ZBM/VMLINUZ-BACKUP.EFI"
+[ ! -f "$ZBM_DIR/VMLINUZ-RECOVERY.EFI" ] || run cp "$ZBM_DIR/VMLINUZ-RECOVERY.EFI" "$MNT/boot/efi/EFI/ZBM/VMLINUZ-RECOVERY.EFI"
+# Firmware that forgets boot entries still finds the fallback path.
+run cp "$ZBM_DIR/VMLINUZ.EFI" "$MNT/boot/efi/EFI/BOOT/BOOTX64.EFI"
+run efibootmgr -c -d "$DISK" -p 1 -L 'Kirin (ZFSBootMenu, backup)' -l '\EFI\ZBM\VMLINUZ-BACKUP.EFI'
+run efibootmgr -c -d "$DISK" -p 1 -L 'Kirin (ZFSBootMenu)' -l '\EFI\ZBM\VMLINUZ.EFI'
+
+say 'Finishing'
+run zfs snapshot "$POOL/ROOT/$BE@installed"
+run umount -n -R "$MNT"
+run zpool export "$POOL"
+trap - ERR
+cat <<EOF
+
+Kirin is installed on $DISK with an OpenZFS root.
+Remove the USB stick and restart. ZFSBootMenu starts first$([ "$ENCRYPT" -eq 1 ] && echo ', asks for your disk passphrase,') and boots Kirin.
+A snapshot called "installed" is your rollback point; see kirin-be and the storage lesson.
+EOF

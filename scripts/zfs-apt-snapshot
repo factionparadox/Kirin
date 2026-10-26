@@ -1,0 +1,17 @@
+#!/bin/sh
+# Kirin: snapshot the ZFS root before APT changes any package (run by DPkg::Pre-Invoke).
+# Keeps the newest $KEEP apt snapshots. Never fails, so it can never block APT.
+KEEP=${KIRIN_APT_SNAPSHOTS_KEEP:-20}
+[ "$(findmnt -no FSTYPE / 2>/dev/null)" = zfs ] || exit 0
+command -v zfs >/dev/null 2>&1 || exit 0
+ds=$(findmnt -no SOURCE /)
+now=$(date +%s)
+# One snapshot per APT run is enough; apt can call dpkg several times in a row.
+last=$(zfs list -Hp -t snapshot -o name,creation -s creation "$ds" 2>/dev/null | awk -F'\t' '$1 ~ /@apt-/ {t=$2} END {print t+0}')
+if [ $((now - last)) -ge 300 ]; then
+  name="$ds@apt-$(date +%Y%m%d-%H%M%S)"
+  zfs snapshot "$name" 2>/dev/null && echo "Kirin: snapshot ${name#*/*/} taken before this change (kirin-be list)"
+fi
+zfs list -H -t snapshot -o name -s creation "$ds" 2>/dev/null | grep '@apt-' | head -n "-$KEEP" |
+  while read -r old; do zfs destroy "$old" 2>/dev/null || true; done
+exit 0

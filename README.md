@@ -2,7 +2,7 @@
 
 **An educational Linux desktop with local AI, built on openKylin 3.0.** Kirin teaches you how your computer works, helps you code and learn Russian without an internet connection or an account, and runs well on the Framework Laptop 13 Pro.
 
-**Status: Kirin Linux 1.0 builds.** `build/kirin-build.sh` turns the official openKylin 3.0 ISO into a bootable Kirin ISO (about 56 GB), and every build audit passes. Testing on real hardware is under way. OpenZFS recovery, Web App Studio and a graphical APT manager are still plans; see [What's not done yet](#whats-not-done-yet).
+**Status: Kirin Linux 1.0 builds.** `build/kirin-build.sh` turns the official openKylin 3.0 ISO into a bootable Kirin ISO (about 56 GB), and every build audit passes. Testing on real hardware is under way. The OpenZFS root installer is new and not yet tested on hardware; Web App Studio and a graphical APT manager are still plans; see [What's not done yet](#whats-not-done-yet).
 
 ## What you get
 
@@ -18,6 +18,7 @@
 | Learning | Kirin Learn: offline Linux lessons, safe command explanations, Vim and Neovim tutors ([Education](docs/EDUCATION.md)) |
 | Russian, A1 to B2 | The *Между нами* textbook with audio, FSI, DLI and Peace Corps courses, a 10,000-word spaced-repetition drill, 29 LibriVox audiobooks, Russian Wikisource, Wikipedia and Wiktionary, Piper voices and the AI tutor ([Russian learning kit](docs/RUSSIAN.md)) |
 | Hardware | Tuned for the Framework Laptop 13 Pro (Intel Core Ultra Series 3): fingerprint login with fprintd, GPU video decoding, firmware updates with fwupd, `framework_tool`, thermald and power profiles, zram swap ([Hardware](docs/HARDWARE.md)) |
+| OpenZFS root | Optional installer with an OpenZFS root (encryption optional), separate `/home`, ZFSBootMenu, a snapshot before every APT change and `kirin-be` boot environments for rollback; the normal openKylin installer stays available ([ZFS](docs/ZFS.md)) |
 | Kirin packages | Built from pinned upstream sources and published as a signed APT repository ([Kirin repo](docs/KIRIN-REPO.md)) |
 
 ## Building the ISO
@@ -59,6 +60,7 @@ kirin-learn path                        # the Russian study plan, A1 to B2
 kirin-learn browse                       # offline lessons
 kirin-learn explain 'apt update'         # what a command does, without running it
 kirin-learn tutor vim | neovim           # interactive editor tutors
+kirin-learn learn storage                # OpenZFS, snapshots and boot environments
 kirin-learn ask-code 'Explain ZFS datasets'
 kirin-learn russian                      # AI Russian tutor; /say, /level B1, /quit
 kirin-learn vocab --say                  # today's Russian words
@@ -72,7 +74,8 @@ Lessons explain commands without running them, and system inspection is read-onl
 
 | Planned | Notes |
 | --- | --- |
-| OpenZFS root with ZFSBootMenu boot environments | Kirin currently installs with openKylin's installer and filesystem |
+| Graphical snapshot and boot-environment manager | `kirin-be` and ZFSBootMenu do it today from the terminal and boot menu |
+| Hardware test of the ZFS installer | Rehearse with `sudo kirin-zfs-install --dry-run`; Secure Boot must be off |
 | Graphical APT manager (MX Package Installer port) | APT, Warehouse and Flatseal work today |
 | Web App Studio | Launchers for web apps with isolated browser profiles |
 | Removing systemd's `birthDate` user field | [Systemd policy](docs/SYSTEMD-POLICY.md) |
@@ -93,5 +96,6 @@ Kirin is assembled almost entirely from other people's work, and keeps their lic
 * **System:** [openKylin](https://www.openkylin.top/) and [UKUI](https://www.ukui.org/), [Ubuntu](https://ubuntu.com/) and [Debian](https://www.debian.org/) packages, [Flatpak](https://flatpak.org/), [Warehouse](https://github.com/flattool/warehouse), [Flatseal](https://github.com/tchx84/Flatseal), [kitty](https://sw.kovidgoyal.net/kitty/), [fish](https://fishshell.com/), [Fastfetch](https://github.com/fastfetch-cli/fastfetch), [Neovim](https://neovim.io/)
 * **AI:** [Ollama](https://ollama.com/), [Qwen](https://github.com/QwenLM) models, [Alpaca](https://github.com/Jeffser/Alpaca), [Piper](https://github.com/rhasspy/piper) and its voices
 * **Russian:** *Между нами* (University of Kansas), FSI, DLI and Peace Corps courses (via [fsi-language-courses.org](https://www.fsi-language-courses.org/) and [ERIC](https://eric.ed.gov/)), [LibriVox](https://librivox.org/) readers and the [Internet Archive](https://archive.org/), [Kiwix](https://kiwix.org/) and the Wikimedia projects, [OpenRussian](https://en.openrussian.org/), [FrequencyWords](https://github.com/hermitdave/FrequencyWords)
+* **Storage:** [OpenZFS](https://openzfs.org/), [ZFSBootMenu](https://zfsbootmenu.org/)
 * **Hardware:** [Framework](https://frame.work/) (`framework_tool`, Linux guides), [fprintd/libfprint](https://fprint.freedesktop.org/), [fwupd](https://fwupd.org/), and the [nixos-hardware](https://github.com/NixOS/nixos-hardware) Framework modules
 * **Inspiration:** [Archon/Cognoscenti](https://github.com/factionparadox/Archon)

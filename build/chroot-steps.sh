@@ -130,6 +130,46 @@ case "$step" in
       [ -n "$done_one" ] || echo "NOT AVAILABLE: $choice"
     done
     ;;
+  zfs)
+    # OpenZFS from Ubuntu 26.04: its 2.4.1 is patched for Linux 7.0, the kernel openKylin
+    # 3.0 ships. DKMS compiles the module for every kernel in the image that has headers.
+    pin=/etc/apt/preferences.d/83kirin-zfs
+    if [ ! -f /etc/apt/sources.list.d/kirin-ubuntu.sources ]; then echo 'ZFS: SKIPPED (Ubuntu repository not enabled)'; exit 0; fi
+    for suite in resolute resolute-updates resolute-security; do
+      printf 'Package: src:zfs-linux\nPin: release o=Ubuntu,n=%s\nPin-Priority: 990\n\n' "$suite"
+    done > "$pin"
+    want='zfs-dkms zfsutils-linux zfs-initramfs zfs-zed'
+    # Only packages built from the zfs-linux source may come from Ubuntu.
+    bad=''
+    for entry in $(apt-get -s -q install --no-install-recommends $want 2>/dev/null |
+                   sed -n 's/^Inst \([^ ]*\) .*(\([^ ]*\) Ubuntu[: ].*/\1=\2/p'); do
+      src=$(apt-cache show "$entry" 2>/dev/null | awk '/^Source:/ {print $2; exit}')
+      [ "${src:-${entry%%=*}}" = zfs-linux ] || bad="$bad ${entry%%=*}"
+    done
+    if [ -n "$bad" ]; then
+      rm -f "$pin"; echo "ZFS: SKIPPED (would also take$bad from Ubuntu)"; exit 0
+    fi
+    # shellcheck disable=SC2086
+    if ! apt-get install -y -q --no-install-recommends $apt_opts $want gdisk dosfstools efibootmgr squashfs-tools >/dev/null; then
+      apt-get purge -y -q $want >/dev/null 2>&1 || true
+      rm -f "$pin"; echo 'ZFS: FAILED (packages did not install)'; exit 0
+    fi
+    zver=$(dpkg-query -W -f='${Version}' zfs-dkms | sed 's/^[0-9]*://; s/-[^-]*$//')
+    ok=1 built=0
+    for kdir in /lib/modules/*; do
+      [ -d "$kdir" ] || continue
+      k=$(basename "$kdir")
+      [ -e "$kdir/build" ] || { echo "ZFS: no headers for $k, skipped"; continue; }
+      dkms install "zfs/$zver" -k "$k" >/dev/null 2>&1 || true
+      if find "$kdir" -name 'zfs.ko*' | grep -q .; then echo "ZFS_MODULE $k"; built=$((built + 1)); else echo "ZFS: module did not build for $k"; ok=0; fi
+    done
+    if [ "$ok" -eq 0 ] || [ "$built" -eq 0 ]; then
+      apt-get purge -y -q $want >/dev/null 2>&1 || true
+      rm -f "$pin"; echo 'ZFS: FAILED (module build; see /var/lib/dkms/zfs)'; exit 0
+    fi
+    systemctl enable zfs.target zfs-import-cache.service zfs-mount.service zfs-import.target zfs-zed.service >/dev/null 2>&1 || true
+    echo "ZFS: OpenZFS $zver ready ($(zfs version 2>/dev/null | head -1))"
+    ;;
   pin-extras)
     # Packages that came from Ubuntu or Debian (Kirin's extras and their dependencies)
     # are pinned to their source so they keep getting its updates (see 80kirin-extra-repos).

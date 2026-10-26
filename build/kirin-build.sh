@@ -34,6 +34,11 @@ AUDIOBOOKS_TSV=${KIRIN_TEST_AUDIOBOOKS_TSV:-$REPO/packaging/russian/audiobooks.t
 ARCHIVE_BASE=${KIRIN_TEST_ARCHIVE_BASE:-https://archive.org/}
 MEZHDUNAMI_BASE=${KIRIN_TEST_MEZHDUNAMI_BASE:-https://mezhdunami.org/}
 YTDLP_URL='https://github.com/yt-dlp/yt-dlp/releases/latest/download'
+# ZFSBootMenu prebuilt EFI (bundles OpenZFS 2.4.0). Hashes from the release's sha256.txt,
+# whose signify signature was checked against releng/keys/zfsbootmenu.pub.
+ZBM_VERSION='3.1.0'
+ZBM_URL=${KIRIN_TEST_ZBM_URL:-https://github.com/zbm-dev/zfsbootmenu/releases/download/v$ZBM_VERSION}
+ZBM_FILES=${KIRIN_TEST_ZBM_FILES:-"zfsbootmenu-release-x86_64-v$ZBM_VERSION-linux6.18.EFI=0a2a192de90be4935c21a810f9e5281f0cbf625a76b2d6e9125c39c13becfe83 zfsbootmenu-recovery-x86_64-v$ZBM_VERSION-linux6.18.EFI=06c3c9409fa92b26e45c88f3bb4a35a544e6ef19ca76513b04d1494320eafc05"}
 # More Kiwix ZIMs for reading at B1-B2: key|directory|prefix (the Wikipedia variant is set by --ru-wikipedia).
 KIWIX_ZIM_BASE=${KIRIN_TEST_KIWIX_ZIM_BASE:-https://download.kiwix.org/zim}
 OLLAMA_VERSION_DEFAULT='v0.40.11'
@@ -529,7 +534,58 @@ stage_payloads() {
   fetch_debian_keys
   fetch_proton
   fetch_kirin_key
+  fetch_zfsbootmenu
   fetch_russian
+}
+
+fetch_zfsbootmenu() {
+  local dir="$PAYLOADS/zfsbootmenu" pair name sha
+  mkdir -p "$dir"
+  for pair in $ZBM_FILES; do
+    name=${pair%=*} sha=${pair##*=}
+    if [ ! -f "$dir/$name" ] || [ "$(sha256sum "$dir/$name" | cut -d' ' -f1)" != "$sha" ]; then
+      curl -fsSL "$ZBM_URL/$name" -o "$dir/$name.part" || die "could not download $name"
+      [ "$(sha256sum "$dir/$name.part" | cut -d' ' -f1)" = "$sha" ] || { rm -f "$dir/$name.part"; die "$name checksum mismatch"; }
+      mv -f "$dir/$name.part" "$dir/$name"
+    fi
+  done
+  info "ZFSBootMenu $ZBM_VERSION verified"
+}
+
+install_zfsbootmenu() {
+  local dir="$ROOTFS/usr/share/kirin/zfsbootmenu" pair name
+  rm -rf "$dir"; mkdir -p "$dir"
+  for pair in $ZBM_FILES; do
+    name=${pair%=*}
+    case "$name" in
+      *release*) install -m 0644 "$PAYLOADS/zfsbootmenu/$name" "$dir/VMLINUZ.EFI" ;;
+      *recovery*) install -m 0644 "$PAYLOADS/zfsbootmenu/$name" "$dir/VMLINUZ-RECOVERY.EFI" ;;
+    esac
+  done
+  printf '%s\n' "$ZBM_FILES" | tr ' ' '\n' > "$dir/SOURCES"
+  printf 'ZFSBootMenu %s (https://github.com/zbm-dev/zfsbootmenu), MIT licence.\n' "$ZBM_VERSION" > "$dir/README"
+}
+
+# ZFS root support: the module for every kernel, the tools, ZFSBootMenu and the installer.
+audit_zfs() {
+  local ok=0 k found=0
+  for k in "$ROOTFS"/lib/modules/*; do
+    [ -d "$k" ] || continue
+    found=1
+    if find "$k" -name 'zfs.ko*' | grep -q .; then echo "module: $(basename "$k")"; else echo "no ZFS module for $(basename "$k")"; ok=1; fi
+  done
+  [ "$found" -eq 1 ] || { echo 'no kernels in the image'; ok=1; }
+  for f in usr/sbin/zpool usr/sbin/zfs usr/share/kirin/zfsbootmenu/VMLINUZ.EFI usr/sbin/kirin-zfs-install usr/bin/kirin-be; do
+    [ -e "$ROOTFS/$f" ] || { echo "missing: /$f"; ok=1; }
+  done
+  local pair name sha
+  for pair in $ZBM_FILES; do
+    name=${pair%=*} sha=${pair##*=}
+    case "$name" in *release*) name=VMLINUZ.EFI ;; *recovery*) name=VMLINUZ-RECOVERY.EFI ;; *) continue ;; esac
+    [ "$(sha256sum "$ROOTFS/usr/share/kirin/zfsbootmenu/$name" 2>/dev/null | cut -d' ' -f1)" = "$sha" ] ||
+      { echo "ZFSBootMenu $name does not match its pinned hash"; ok=1; }
+  done
+  return "$ok"
 }
 
 install_russian() {
@@ -635,6 +691,7 @@ stage_customise() {
   [ "$NO_EXTRA_REPOS" -eq 1 ] || [ -f "$PAYLOADS/kirin-debian.gpg" ] || fetch_debian_keys
   [ -d "$PAYLOADS/proton" ] || fetch_proton
   fetch_kirin_key
+  [ -d "$PAYLOADS/zfsbootmenu" ] || fetch_zfsbootmenu
   local olroot="$PAYLOADS/ollama-$OLLAMA_VERSION/root"
 
   # Language policy first, so dpkg path-exclusions apply to packages installed next.
@@ -675,6 +732,9 @@ stage_customise() {
   in_chroot kirin-debs | tee "$AUDIT/kirin-debs.log" | sed 's/^/    /'
   info 'installing Proton VPN, Pass and Mail (official packages)'
   in_chroot proton | tee "$AUDIT/proton.log" | sed 's/^/    /'
+  info 'adding OpenZFS (built for the image kernel) and ZFSBootMenu'
+  in_chroot zfs | tee "$AUDIT/zfs-build.log" | sed 's/^/    /'
+  install_zfsbootmenu
   if [ "$NO_EXTRA_REPOS" -eq 0 ]; then
     in_chroot pin-extras > "$AUDIT/pin-extras.log"; info "$(tail -1 "$AUDIT/pin-extras.log")"
   fi
@@ -696,7 +756,7 @@ apply_kirin_layer() {
   info 'applying Kirin branding'
   python3 "$REPO/scripts/kirin-rebrand.py" --root "$ROOTFS" --apply | sed 's/^/    /'
   info 'applying Kirin defaults (version, hostname, default apps, taskbar, Fastfetch)'
-  python3 "$REPO/scripts/kirin-polish.py" --root "$ROOTFS" --apply | tee "$AUDIT/defaults.log" | sed 's/^/    /'
+  python3 "$REPO/scripts/kirin-polish.py" --root "$ROOTFS" --apply | tee "$AUDIT/defaults-apply.log" | sed 's/^/    /'
 
   in_chroot finish | tee "$AUDIT/finish.log"
   in_chroot manifest > "$WORK/filesystem.manifest"
@@ -740,6 +800,7 @@ stage_audit() {
   run_audit russian audit_russian
   run_audit branding python3 "$REPO/scripts/kirin-rebrand.py" --root "$ROOTFS" --audit
   run_audit defaults python3 "$REPO/scripts/kirin-polish.py" --root "$ROOTFS" --audit
+  run_audit zfs audit_zfs
   grep -q '^FAIL ai-payload' "$summary" && die 'AI payload contract failed; this is never waived'
   if [ "$failed" -eq 1 ] && [ "$TEST_BUILD" -ne 1 ]; then
     die 'policy audits failed; fix them, or pass --test-build for an unverified test image'

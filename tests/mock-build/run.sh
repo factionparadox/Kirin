@@ -77,6 +77,10 @@ PY
 printf 'testbook\tA2\ngonebook\tB1\n' > "$T/audiobooks.tsv"
 export KIRIN_TEST_AUDIOBOOKS_TSV="$T/audiobooks.tsv" KIRIN_TEST_ARCHIVE_BASE="file://$SITE/archive/"
 export KIRIN_TEST_KIWIX_ZIM_BASE="file://$SITE/zim" KIRIN_TEST_MEZHDUNAMI_BASE="file://$SITE/no-such-site/" KIRIN_TEST_YTDLP=true
+# ZFSBootMenu, served locally with its pinned hashes.
+mkdir -p "$SITE/zbm"; printf 'zbm release' > "$SITE/zbm/zbm-release.EFI"; printf 'zbm recovery' > "$SITE/zbm/zbm-recovery.EFI"
+KIRIN_TEST_ZBM_FILES="zbm-release.EFI=$(sha256sum "$SITE/zbm/zbm-release.EFI" | cut -d' ' -f1) zbm-recovery.EFI=$(sha256sum "$SITE/zbm/zbm-recovery.EFI" | cut -d' ' -f1)"
+export KIRIN_TEST_ZBM_URL="file://$SITE/zbm" KIRIN_TEST_ZBM_FILES
 FIX="$REPO/tests/fixtures"
 KIRIN_TEST_DEBIAN_KEYS="file://$FIX/test-key-rsa.asc=$(head -1 "$FIX/test-key-fingerprints.txt")"
 export KIRIN_TEST_DEBIAN_KEYS
@@ -166,6 +170,10 @@ grep -q 'ENABLED debian' "$T/work/audit/extra-repos.log" || fail 'extra repos st
 grep -q 'installed fastfetch' "$T/work/audit/extra-packages.log" || fail 'extra packages step not run'
 grep -q 'UBUNTU alsa-ucm-conf' "$T/work/audit/prefer-ubuntu.log" || fail 'prefer-ubuntu step not run'
 grep -q 'from Ubuntu: fprintd' "$T/work/audit/pin-extras.log" || fail 'extras not pinned for updates'
+grep -q 'ZFS: OpenZFS 2.4.1 ready' "$T/work/audit/zfs-build.log" || fail 'ZFS step not run'
+cmp -s "$SITE/zbm/zbm-release.EFI" "$R/usr/share/kirin/zfsbootmenu/VMLINUZ.EFI" || fail 'ZFSBootMenu not installed'
+[ -x "$R/usr/sbin/kirin-zfs-install" ] && [ -x "$R/usr/bin/kirin-be" ] && [ -x "$R/usr/lib/kirin/zfs-apt-snapshot" ] || fail 'ZFS tools not installed'
+grep -q 'PASS zfs' "$T/work/audit/summary" || fail 'zfs audit did not pass'
 grep -q 'blacklist cros-usbpd-charger' "$R/etc/modprobe.d/kirin-framework.conf" || fail 'Framework module options missing'
 grep -q 'ani-cli' "$T/work/audit/kirin-debs.log" || fail 'Kirin packages step not run'
 grep -q 'Proton' "$T/work/audit/proton.log" || fail 'Proton step not run'
