@@ -17,6 +17,7 @@ service), unless --required is given.
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import os
@@ -108,14 +109,16 @@ def fetch_item(base: str, ident: str, level: str, dest: Path) -> dict:
     folder = Path(level) / safe_name(f'{title} - {creator}', 120)
     out = dest / folder
     out.mkdir(parents=True, exist_ok=True)
-    names = []
-    for f in tracks:
-        name = safe_name(Path(f['name']).name, 150)
+    names = [safe_name(Path(f['name']).name, 150) for f in tracks]
+
+    def one(pair):
+        f, name = pair
         target = out / name
         if not (target.is_file() and digests(target) == (f['md5'], f['sha1'])):
-            url = f'{base}download/{ident}/{parse.quote(f["name"])}'
-            download(url, target, f['md5'], f['sha1'])
-        names.append(name)
+            download(f'{base}download/{ident}/{parse.quote(f["name"])}', target, f['md5'], f['sha1'])
+    # The Archive serves each file slowly but happily serves a few at once.
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        list(pool.map(one, zip(tracks, names)))
     for stale in out.iterdir():
         if stale.name not in names:
             stale.unlink()
@@ -148,14 +151,15 @@ def main(argv=None) -> int:
         return 2
     args.dest.mkdir(parents=True, exist_ok=True)
     catalog, failed = [], 0
-    for ident, level in rows:
+    for number, (ident, level) in enumerate(rows, 1):
+        print(f'[{number}/{len(rows)}] {ident}', flush=True)
         try:
             book = fetch_item(base, ident, level, args.dest)
             catalog.append(book)
-            print(f'{level} {book["title"]} - {book["creator"]}: {len(book["files"])} tracks')
+            print(f'    {level} {book["title"]} - {book["creator"]}: {len(book["files"])} tracks', flush=True)
         except (OSError, ValueError) as exc:
             failed += 1
-            print(f'not available: {ident}: {exc}')
+            print(f'    not available: {ident}: {exc}', flush=True)
     order = {lvl: n for n, lvl in enumerate(LEVELS)}
     catalog.sort(key=lambda b: (order[b['level']], b['title']))
     (args.dest / 'catalog.json').write_text(json.dumps(catalog, ensure_ascii=False, indent=1), encoding='utf-8')

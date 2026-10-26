@@ -9,6 +9,8 @@
 #
 # See docs/BUILDING.md for stages, review gates and what the output is (and is not).
 set -Eeuo pipefail
+# Show helper output as it happens, even through pipes (Python buffers it otherwise).
+export PYTHONUNBUFFERED=1
 
 HERE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 REPO=$(cd -- "$HERE/.." && pwd)
