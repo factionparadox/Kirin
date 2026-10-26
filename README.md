@@ -1,123 +1,97 @@
 # Kirin Linux
 
-**An educational, mutable Linux desktop with local AI, recoverable system management and practical software tools.**
+**An educational Linux desktop with local AI, built on openKylin 3.0.** Kirin teaches you how your computer works, helps you code and learn Russian without an internet connection or an account, and runs well on the Framework Laptop 13 Pro.
 
-**Status: source-stage project.** Kirin is not yet a bootable or verified installation image. The features below are release goals unless explicitly marked as existing source code.
+**Status: Kirin Linux 1.0 builds.** `build/kirin-build.sh` turns the official openKylin 3.0 ISO into a bootable Kirin ISO (about 56 GB), and every build audit passes. Testing on real hardware is under way. OpenZFS recovery, Web App Studio and a graphical APT manager are still plans; see [What's not done yet](#whats-not-done-yet).
 
-## Why Kirin exists
+## What you get
 
-Kirin is based on **openKylin 3.0 (Huanghe)** and **UKUI 4.24**. It retains an approachable desktop and openKylin's existing offline AI capabilities, while adding Linux education, a dedicated coding model, OpenZFS-based system recovery, and straightforward software administration.
-
-Inspired by [Archon/Cognoscenti](https://github.com/factionparadox/Archon), Kirin aims to **teach the user how the operating system works**. Lessons, command explanations, manual pages and read-only system inspection must work offline and without an account or AI. Users retain the ability to modify the system; snapshots and boot environments are intended to help recover from mistakes.
-
-## Distribution specification
-
-| Component | Kirin design |
+| | Kirin |
 | --- | --- |
-| Foundation | openKylin 3.0 Huanghe, initially x86-64 |
-| Desktop | UKUI 4.24 |
-| Filesystem | OpenZFS root, independent persistent user datasets |
-| Boot and recovery | ZFSBootMenu, snapshots, cloned boot environments, graphical ZFS administration |
-| Native software | APT/dpkg, planned MX Package Installer port and Synaptic; pinned Ubuntu 26.04 and Debian 13 repositories for packages openKylin lacks |
-| Flatpak software | Flatpak and Flathub, **Warehouse** and **Flatseal** preinstalled |
-| Replaced | openKylin Software Store (not the OS updater or APT/dpkg) |
-| AI | Preserve every existing upstream model; add offline Ollama + Qwen2.5-Coder 7B Instruct, with the Alpaca desktop chat app replacing openKylin's assistant |
-| Applications | LibreOffice (en-GB, ru), VLC, Proton VPN/Pass/Mail (official packages), Discord, Sober, ani-cli |
-| Kirin packages | Built from pinned upstream sources (`packaging/debs`), installed in the ISO and published as a signed APT repository ([Kirin repo](docs/KIRIN-REPO.md)) |
-| Branding | Kirin Linux 1.0: boot splash, menu names, OS name, Fastfetch logo and icons ([Branding](docs/BRANDING.md)) |
-| Hardware | Tuned for the Framework Laptop 13 Pro: fprintd fingerprint login, fwupd firmware updates, `framework_tool`, light sensor ([Hardware](docs/HARDWARE.md)) |
-| Desktop defaults | Welcome to Kirin on first login; taskbar pins; LibreOffice and VLC as default apps (WPS Office removed); kitty terminal (translucent, blurred) with fish; Fastfetch in new terminals; hostname `kirin` |
-| Web apps | Planned Web App Studio for ChatGPT, Claude and arbitrary websites |
-| Learning | Kirin Learn, offline lessons, Vim, Neovim and native tutors |
-| Russian study (A1 to B2) | Local AI tutor (Qwen3 30B), the *Между нами* textbook with audio, FSI/DLI/Peace Corps courses, 10,000-word spaced-repetition drill, LibriVox audiobooks, Russian Wikisource, Wikipedia and Wiktionary, Piper voices ([Russian learning kit](docs/RUSSIAN.md)) |
-| Language | British English (en_GB.UTF-8) default; Russian (ru_RU.UTF-8) supported |
-| Accounts | Local Linux accounts only; no mandatory Kylin ID, token centre, cloud sync or device registration |
-| Init and security | systemd retained, with downstream birthDate field removal required; no SELinux requirement |
-
-## Software without an app store
-
-Kirin will **remove openKylin's Software Store** from its target image. It will be replaced with a dedicated Flatpak administration stack:
-
-- **[Warehouse](https://github.com/flattool/warehouse)** — Flatpak ID io.github.flattool.Warehouse. Install and remove applications, manage remotes, inspect packages, clean application data and switch to available previous versions.
-- **[Flatseal](https://github.com/tchx84/Flatseal)** — Flatpak ID com.github.tchx84.Flatseal. Inspect and manage Flatpak sandbox permissions.
-
-The Flatpak runtime, both applications, their required runtimes and desktop launchers must be **included in the installation image**. Kirin must not require a first-boot download merely to open its Flatpak manager. Flathub is the intended default remote; users may add or remove others.
-
-**APT remains first-class** for the OS, developer tools and native applications. Kirin's planned MX Package Installer port provides graphical APT management, with Synaptic for advanced package tasks. openKylin's repositories remain authoritative. Additional Debian, Ubuntu and MX sources are opt-in, authenticated and package-specific: broad cross-distribution upgrades must not replace the base's libraries unchecked.
-
-We will **keep operating-system update capability** when removing the Software Store. The installed binary package names and dependencies must be verified against the actual 3.0 ISO before any purge. See [Software management and replacement plan](docs/SOFTWARE.md).
-
-## Local AI and Web App Studio
-
-**Do not remove or replace openKylin's existing AI models.** Preserve their offline functions and payloads. Kirin adds **Ollama with Qwen2.5-Coder 7B Instruct** as an additional, dedicated coding assistant. Its complete model files must already be on the ISO, usable without a first-boot download. See [offline model validation](docs/IMAGE-BUILD.md).
-
-Web App Studio is planned to create UKUI launchers for ChatGPT, Claude and other user-chosen services, with isolated browser profiles. Website logins are entirely separate from Kirin's local operating-system accounts.
-
-## Kirin Learn
-
-The repository currently has an offline lesson library, a Python teaching CLI, desktop launchers and a Neovim tutor. Vim and Neovim are mandatory base-image packages. Learning is possible without AI, a subscription or internet access.
-
-~~~sh
-kirin-learn browse
-kirin-learn learn packages
-kirin-learn explain 'apt update'
-kirin-learn doctor
-kirin-learn tutor vim
-kirin-learn tutor neovim
-kirin-learn ask-code 'Explain ZFS datasets'
-~~~
-
-Lessons explain commands without executing them; system inspection is read-only. A graphical UKUI help centre is planned. See [education goals](docs/EDUCATION.md).
-
-## Recovery and storage
-
-Kirin is intended to install onto OpenZFS, boot using ZFSBootMenu and make root boot environments, snapshots and dataset administration accessible from UKUI. Package updates should be able to create recovery environments before system changes. Personal files should be stored separately from the switchable root environments.
-
-The required ZFS kernel and userspace integration, root installer, boot-environment activation and rollback, upgrade transaction safety and hardware testing **remain outstanding**.
-
-## Localisation, accounts and systemd
-
-Kirin targets **British English** as its default and **Russian** as its second supported language. Chinese language packs, menu translations and regional defaults are to be excluded from the image, while preserving Unicode rendering, libraries, fonts and every upstream AI model. UKUI translation completeness needs actual image-level verification. [Languages](docs/LANGUAGES.md).
-
-No openKylin ID, Token Centre, required vendor login, cloud settings sync or device-binding. Keep local user accounts, PAM, polkit and normal UKUI settings. [Accounts](docs/ACCOUNTS.md).
-
-Systemd stays, but Kirin's downstream build must remove the optional birthDate user-record feature rather than merely freezing an arbitrary systemd version. [Systemd policy](docs/SYSTEMD-POLICY.md).
-
-## Implementation status
-
-| Present in this source repository | Still to build and test |
-| --- | --- |
-| Offline lessons, Kirin Learn CLI, editor tutoring and launchers | Installed and tested UKUI educational desktop |
-| Offline AI-file integrity checking | Real model payloads embedded and functioning |
-| Language policy and vendor-account audits | Translated, account-free openKylin image |
-| Store-removal and Flatpak integration specification; image-inventory audit | Actual store removal, Warehouse/Flatseal offline integration and runtime tests |
-| ISO remaster pipeline (`build/kirin-build.sh`), tested against a mock image | A real build from the openKylin 3.0 ISO and VM boot testing |
-| Design and package manifests | OpenZFS-root ISO, boot environments, ZFS GUI, Web App Studio and MX GUI APT port |
-
-**No finished ISO, verified graphical package manager, or ZFS-root boot is claimed.** A release requires a genuine openKylin build root, offline installation testing and checks on disposable drives or virtual machines.
+| Base | openKylin 3.0 (Huanghe), UKUI 4.24 desktop, Linux 7.0, x86-64 |
+| Look and feel | Kirin Linux 1.0 branding: boot splash, boot menu, OS name, icons and menu names ([Branding](docs/BRANDING.md)); Welcome to Kirin on first login; kitty terminal (translucent, blurred) running fish, with Fastfetch |
+| Language | British English by default, Russian supported; Chinese language packs and menu translations removed ([Languages](docs/LANGUAGES.md)) |
+| Accounts | Local accounts only: no Kylin ID, token centre, cloud sync or device registration ([Accounts](docs/ACCOUNTS.md)) |
+| Applications | LibreOffice (English and Russian), VLC, mpv, Proton VPN, Pass and Mail (official packages), Discord, Sober, ani-cli; WPS Office removed |
+| Software | APT for the system, with Ubuntu 26.04 and Debian 13 added below openKylin for packages it lacks (never replacing its own); Flatpak with Warehouse and Flatseal instead of openKylin's Software Store ([Software](docs/SOFTWARE.md)) |
+| Local AI | Ollama with Qwen2.5-Coder 7B (coding) and Qwen3 30B (Russian tutor), chat in Alpaca; every openKylin AI model kept. All of it works offline, and nothing leaves the computer |
+| Learning | Kirin Learn: offline Linux lessons, safe command explanations, Vim and Neovim tutors ([Education](docs/EDUCATION.md)) |
+| Russian, A1 to B2 | The *Между нами* textbook with audio, FSI, DLI and Peace Corps courses, a 10,000-word spaced-repetition drill, 29 LibriVox audiobooks, Russian Wikisource, Wikipedia and Wiktionary, Piper voices and the AI tutor ([Russian learning kit](docs/RUSSIAN.md)) |
+| Hardware | Tuned for the Framework Laptop 13 Pro (Intel Core Ultra Series 3): fingerprint login with fprintd, GPU video decoding, firmware updates with fwupd, `framework_tool`, thermald and power profiles, zram swap ([Hardware](docs/HARDWARE.md)) |
+| Kirin packages | Built from pinned upstream sources and published as a signed APT repository ([Kirin repo](docs/KIRIN-REPO.md)) |
 
 ## Building the ISO
 
-`build/kirin-build.sh` remasters the official openKylin 3.0 ISO into a Kirin image. It needs an x86-64 Linux host (WSL2 works) with root, internet access and about 70 GB free, and it stops for a human review of the upstream AI model inventory before changing anything. See [Building the ISO](docs/BUILDING.md).
+You need an x86-64 Linux machine (WSL2 works) with root, internet access, about 200 GB free while building, and the official `openKylin-Desktop-V3.0-20260918-x86_64.iso`.
 
 ~~~sh
 sudo build/kirin-build.sh --iso openKylin-Desktop-V3.0-20260918-x86_64.iso
 ~~~
 
-## Source-stage checks
+The first run stops once to let you review the list of openKylin's AI model files; continue with `--from inventory --accept-inventory`. The output is `out/kirin-YYYYMMDD-amd64.iso` with its `.sha256` and a `.build.json` record. Write it to a **128 GB USB 3 stick** (it does not fit 32 GB, and only just fits 64 GB) with [Ventoy](https://www.ventoy.net/) or a raw writer.
+
+Useful options:
+
+| Option | What it does |
+| --- | --- |
+| `--from STAGE` / `--only STAGE` | Redo a stage and what follows, or run one stage (`preflight verify extract inventory payloads customise audit pack`) |
+| `--refresh` | After changing only Kirin's own files (branding, defaults, lessons, launchers), re-apply them and repack, without reinstalling packages |
+| `--test-build` | Pack even if a policy audit fails (the failures are listed in `.build.json`) |
+| `--no-russian` | Leave out the Russian kit (about 40 GB smaller) |
+| `--ru-wikipedia mini\|nopic\|maxi\|none` | How much of Russian Wikipedia to include (default `mini`) |
+| `--compression zstd\|gzip\|xz` | Root filesystem compression (default zstd, if the kernel supports it) |
+| `--no-extra-repos` | Do not add the Ubuntu and Debian repositories |
+
+Downloads are verified against published checksums where they exist and pinned on first download where they do not. Nothing is fetched twice. Full details: [Building the ISO](docs/BUILDING.md), [Image build checks](docs/IMAGE-BUILD.md).
+
+## First steps after installing
+
+~~~sh
+fwupdmgr refresh && fwupdmgr update     # BIOS, fingerprint reader and other firmware
+kirin-fingerprint                       # enrol a finger (or Fingerprint Setup in the menu)
+kirin-learn browse                      # Linux lessons
+kirin-learn path                        # the Russian study plan, A1 to B2
+~~~
+
+## Kirin Learn
+
+~~~sh
+kirin-learn browse                       # offline lessons
+kirin-learn explain 'apt update'         # what a command does, without running it
+kirin-learn tutor vim | neovim           # interactive editor tutors
+kirin-learn ask-code 'Explain ZFS datasets'
+kirin-learn russian                      # AI Russian tutor; /say, /level B1, /quit
+kirin-learn vocab --say                  # today's Russian words
+kirin-learn listen --level B1            # audiobooks at your level
+kirin-learn read wikisource              # Russian literature in Kiwix
+~~~
+
+Lessons explain commands without running them, and system inspection is read-only. Everything works offline without an account; only `ask-code` and `russian` use the local AI.
+
+## What's not done yet
+
+| Planned | Notes |
+| --- | --- |
+| OpenZFS root with ZFSBootMenu boot environments | Kirin currently installs with openKylin's installer and filesystem |
+| Graphical APT manager (MX Package Installer port) | APT, Warehouse and Flatseal work today |
+| Web App Studio | Launchers for web apps with isolated browser profiles |
+| Removing systemd's `birthDate` user field | [Systemd policy](docs/SYSTEMD-POLICY.md) |
+| Signed Kirin APT repository live | The pipeline exists; it needs its signing key ([Kirin repo](docs/KIRIN-REPO.md)) |
+| Full UKUI translation check | Automated audits pass; menus still need a human read-through in English and Russian |
+
+## Development checks
 
 ~~~sh
 python3 -m unittest discover -s tests -v
-sudo bash tests/mock-build/run.sh   # builder end-to-end against stub tools
-DESTDIR="$(mktemp -d)" sh scripts/install-education.sh
-# Once a candidate image has been unpacked into an OFFLINE staging root:
-python3 scripts/audit-software-image.py --root /path/to/staged-root
-python3 scripts/kirin-localise.py --root /path/to/staged-root --audit
-python3 scripts/audit-online-accounts.py --root /path/to/staged-root
+bash tests/mock-build/run.sh             # the whole builder, end to end, against stub tools
 ~~~
 
-These checks inspect selected image contracts; they do not build or boot an ISO.
+## Credits
 
-## Upstream credit
+Kirin is assembled almost entirely from other people's work, and keeps their licences and attribution:
 
-Kirin builds on [openKylin](https://www.openkylin.top/), [UKUI](https://www.ukui.org/), [OpenZFS](https://openzfs.github.io/openzfs-docs/), [ZFSBootMenu](https://docs.zfsbootmenu.org/), [Flatpak](https://docs.flatpak.org/), [Warehouse](https://github.com/flattool/warehouse), [Flatseal](https://github.com/tchx84/Flatseal), [Neovim](https://neovim.io/) and [Ollama](https://ollama.com/). Preserve applicable upstream licences and attribution.
+* **System:** [openKylin](https://www.openkylin.top/) and [UKUI](https://www.ukui.org/), [Ubuntu](https://ubuntu.com/) and [Debian](https://www.debian.org/) packages, [Flatpak](https://flatpak.org/), [Warehouse](https://github.com/flattool/warehouse), [Flatseal](https://github.com/tchx84/Flatseal), [kitty](https://sw.kovidgoyal.net/kitty/), [fish](https://fishshell.com/), [Fastfetch](https://github.com/fastfetch-cli/fastfetch), [Neovim](https://neovim.io/)
+* **AI:** [Ollama](https://ollama.com/), [Qwen](https://github.com/QwenLM) models, [Alpaca](https://github.com/Jeffser/Alpaca), [Piper](https://github.com/rhasspy/piper) and its voices
+* **Russian:** *Между нами* (University of Kansas), FSI, DLI and Peace Corps courses (via [fsi-language-courses.org](https://www.fsi-language-courses.org/) and [ERIC](https://eric.ed.gov/)), [LibriVox](https://librivox.org/) readers and the [Internet Archive](https://archive.org/), [Kiwix](https://kiwix.org/) and the Wikimedia projects, [OpenRussian](https://en.openrussian.org/), [FrequencyWords](https://github.com/hermitdave/FrequencyWords)
+* **Hardware:** [Framework](https://frame.work/) (`framework_tool`, Linux guides), [fprintd/libfprint](https://fprint.freedesktop.org/), [fwupd](https://fwupd.org/), and the [nixos-hardware](https://github.com/NixOS/nixos-hardware) Framework modules
+* **Inspiration:** [Archon/Cognoscenti](https://github.com/factionparadox/Archon)

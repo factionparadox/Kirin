@@ -235,7 +235,7 @@ stage_preflight() {
   python3 -c 'import sys; sys.exit(sys.version_info < (3, 11))' || die 'python3 3.11 or newer is required'
   local free_gb need=$MIN_FREE_GB; free_gb=$(df --output=avail -BG "$WORK" | tail -1 | tr -dc 0-9)
   # The Russian kit adds a 19 GB model and a multi-GB dictionary, held in payloads, rootfs and squashfs.
-  [ "$NO_RUSSIAN" -eq 1 ] || [ -n "${KIRIN_MIN_FREE_GB:-}" ] || need=150
+  [ "$NO_RUSSIAN" -eq 1 ] || [ -n "${KIRIN_MIN_FREE_GB:-}" ] || need=200
   [ "$free_gb" -ge "$need" ] || die "need ${need} GB free under $WORK, have ${free_gb} GB"
   info "host ok; ${free_gb} GB free in $WORK"
 }
@@ -859,7 +859,7 @@ record = {
     'audits': dict(reversed(l.split()) for l in open(summary) if l.strip()),
     'test_build': test == '1',
     'not_yet_implemented': ['OpenZFS root and ZFSBootMenu', 'systemd birthDate removal',
-                            'MX Package Installer port', 'Web App Studio', 'Kirin branding'],
+                            'MX Package Installer port', 'Web App Studio'],
 }
 json.dump(record, open(out, 'w'), indent=2)
 PY

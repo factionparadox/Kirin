@@ -7,7 +7,7 @@ This is the first build stage. The resulting ISO boots and installs with openKyl
 ## Build host
 
 - x86-64 Linux, run as root. **WSL2 works** on Windows if its virtual disk has room; Docker or another container needs `--privileged` for the bind mounts and chroot.
-- At least **70 GB free** in the work directory, or about **150 GB** with the Russian learning kit. The upstream ISO, its unpacked tree, the unpacked root, the 4.7 GB coding model and the new squashfs all coexist.
+- At least **70 GB free** in the work directory, or about **200 GB** with the Russian learning kit. The upstream ISO, its unpacked tree, the unpacked root, the downloads (AI models, ZIMs, audiobooks), the new squashfs and the finished ISO all coexist.
 - Python 3.11 or newer, `xorriso`, `squashfs-tools`, `curl` and `zstd`. On Debian or Ubuntu, install them with `apt install xorriso squashfs-tools curl zstd python3`.
 - Internet access to openKylin's package mirrors (used by APT inside the image), `dl.flathub.org`, `github.com` (for the Ollama release) and `registry.ollama.ai` (for the model).
 
