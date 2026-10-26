@@ -165,6 +165,7 @@ grep -q 'NAME="Kirin Linux"' "$R/usr/lib/os-release" || fail 'os-release not reb
 grep -q 'ENABLED debian' "$T/work/audit/extra-repos.log" || fail 'extra repos step not run'
 grep -q 'installed fastfetch' "$T/work/audit/extra-packages.log" || fail 'extra packages step not run'
 grep -q 'UBUNTU alsa-ucm-conf' "$T/work/audit/prefer-ubuntu.log" || fail 'prefer-ubuntu step not run'
+grep -q 'from Ubuntu: fprintd' "$T/work/audit/pin-extras.log" || fail 'extras not pinned for updates'
 grep -q 'blacklist cros-usbpd-charger' "$R/etc/modprobe.d/kirin-framework.conf" || fail 'Framework module options missing'
 grep -q 'ani-cli' "$T/work/audit/kirin-debs.log" || fail 'Kirin packages step not run'
 grep -q 'Proton' "$T/work/audit/proton.log" || fail 'Proton step not run'

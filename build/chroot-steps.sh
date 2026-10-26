@@ -116,6 +116,7 @@ case "$step" in
     # Packages openKylin may lack; each comes from openKylin if it has it, otherwise
     # from the pinned Ubuntu/Debian repositories. A missing one is reported, not fatal.
     apt-get update -q >/dev/null 2>&1 || true
+    [ -f /kirin-build/before-extras ] || installed_set > /kirin-build/before-extras
     # "a|b" means: the first of these that installs (for packages that conflict).
     for choice in $(list /kirin-build/extra-packages.txt); do
       done_one=''
@@ -128,6 +129,25 @@ case "$step" in
       done
       [ -n "$done_one" ] || echo "NOT AVAILABLE: $choice"
     done
+    ;;
+  pin-extras)
+    # Packages that came from Ubuntu or Debian (Kirin's extras and their dependencies)
+    # are pinned to their source so they keep getting its updates (see 80kirin-extra-repos).
+    pins=/etc/apt/preferences.d/82kirin-from-extras
+    rm -f "$pins"
+    [ -f /kirin-build/before-extras ] || { echo 'nothing recorded'; exit 0; }
+    n=0
+    for p in $(installed_set | comm -13 /kirin-build/before-extras -); do
+      origin=$(apt-cache policy "$p" 2>/dev/null | awk '
+        /^ +\*\*\* / {mine=1; next}
+        /^ +[^ ]+ [0-9-]+$/ && !/http|status/ {mine=0}
+        mine && /archive\.ubuntu\.com|security\.ubuntu\.com/ {print "Ubuntu"; exit}
+        mine && /deb\.debian\.org|security\.debian\.org/ {print "Debian"; exit}')
+      [ -n "$origin" ] || continue
+      printf 'Package: %s\nPin: release o=%s\nPin-Priority: 500\n\n' "$p" "$origin" >> "$pins"
+      echo "from $origin: $p"; n=$((n + 1))
+    done
+    echo "$n packages from the extra repositories pinned for updates"
     ;;
   prefer-ubuntu)
     # Hardware data packages where Ubuntu 26.04 (which Framework supports) may be newer

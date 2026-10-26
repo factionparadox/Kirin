@@ -529,9 +529,12 @@ install_russian() {
   mkdir -p "$dest" "$ROOTFS/opt/kirin"
   cp -a "$PAYLOADS/piper-$PIPER_VERSION/root/piper" "$ROOTFS/opt/kirin/piper"
   local part
+  # Hard links save space, but fail while the image is bind-mounted for the chroot;
+  # then make a full copy (never into a half-made directory, which would nest it).
   for part in voices library dictionary audiobooks mezhdunami; do
     [ -d "$r/$part" ] || continue
-    cp -al "$r/$part" "$dest/$part" 2>/dev/null || cp -a "$r/$part" "$dest/$part"
+    rm -rf "$dest/$part"
+    cp -al "$r/$part" "$dest/$part" 2>/dev/null || { rm -rf "$dest/$part"; cp -a "$r/$part" "$dest/$part"; }
   done
   find "$dest" -name '*.part' -delete
   install -m 0644 "$PAYLOADS/tutor-blobs.json" "$ROOTFS/usr/share/kirin/tutor-blobs.json"
@@ -559,10 +562,10 @@ audit_russian() {
       --tag "$TUTOR_TAG" --out "$WORK/tutor-blobs.check" || ok=1
   [ -x "$ROOTFS/opt/kirin/piper/piper" ] || { echo 'Piper missing'; ok=1; }
   (cd "$dest/voices" && sha256sum --quiet -c SHA256SUMS) || ok=1
-  [ "$(grep -c '\.onnx$' "$dest/voices/SHA256SUMS")" -eq 4 ] || { echo 'expected four Russian voices'; ok=1; }
+  [ "$(grep -cs '\.onnx$' "$dest/voices/SHA256SUMS")" = 4 ] || { echo 'expected four Russian voices'; ok=1; }
   # The course library is optional (its sources may move); verify whatever was fetched.
   if [ -s "$dest/library/SHA256SUMS" ]; then (cd "$dest/library" && sha256sum --quiet -c SHA256SUMS) || ok=1; fi
-  echo "library: $(wc -l < "$dest/library/SHA256SUMS") files"
+  echo "library: $(cat "$dest/library/SHA256SUMS" 2>/dev/null | wc -l) files"
   ls "$dest/dictionary/"*.zim >/dev/null 2>&1 || { echo 'Wiktionary ZIM missing'; ok=1; }
   echo "reading: $(cut -f1 "$PAYLOADS/russian/kiwix.list" 2>/dev/null | tr '\n' ' ')"
   # Audiobooks and the Между нами copy are optional; whatever is there must be intact.
@@ -646,6 +649,9 @@ stage_customise() {
   in_chroot kirin-debs | tee "$AUDIT/kirin-debs.log" | sed 's/^/    /'
   info 'installing Proton VPN, Pass and Mail (official packages)'
   in_chroot proton | tee "$AUDIT/proton.log" | sed 's/^/    /'
+  if [ "$NO_EXTRA_REPOS" -eq 0 ]; then
+    in_chroot pin-extras > "$AUDIT/pin-extras.log"; info "$(tail -1 "$AUDIT/pin-extras.log")"
+  fi
   info 'installing Flatpak apps system-wide (Warehouse, Flatseal, Kiwix, Alpaca, Discord, Sober)'
   in_chroot flatpak "$RUSSIAN_DIR"
   local chat_model=$QWEN_TAG

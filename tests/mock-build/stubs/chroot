@@ -37,6 +37,8 @@ elif step == 'extra-repos':
 elif step == 'install-extras':
     assert (root / 'kirin-build/extra-packages.txt').is_file(), 'extra package list not staged'
     print('installed fastfetch from 2.0 http://archive.ubuntu.com/ubuntu')
+elif step == 'pin-extras':
+    print('from Ubuntu: fprintd'); print('1 packages from the extra repositories pinned for updates')
 elif step == 'prefer-ubuntu':
     assert (root / 'kirin-build/prefer-ubuntu.txt').is_file(), 'prefer-ubuntu list not staged'
     print('UBUNTU alsa-ucm-conf 1.2.15-1ubuntu1 (openKylin had 1.2.14-ok1)')
