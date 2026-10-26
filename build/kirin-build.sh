@@ -71,7 +71,7 @@ Options:
   --kiwix-name FILE       Pin the Wiktionary ZIM (e.g. ${KIWIX_PREFIX}2026-09.zim) instead of the newest
   --ru-wikipedia KIND     Russian Wikipedia ZIM: mini (default: every article's introduction, a few GB),
                           nopic (full articles, ~10 GB), maxi (with pictures, ~30 GB) or none
-  --test-build            Produce an ISO even if policy audits fail; named TEST-UNVERIFIED.
+  --test-build            Produce an ISO even if policy audits fail (they are listed in its .build.json).
                           The AI-model contract is never relaxed.
   --from STAGE            Re-run from STAGE onwards
   --only STAGE            Run just STAGE
@@ -787,9 +787,9 @@ PY
     maps+=(-map "$WORK/$sums" "/$sums")
   done
 
-  local label='' stamp; stamp=$(date -u +%Y%m%d)
-  grep -q '^FAIL' "$AUDIT/summary" && label='-TEST-UNVERIFIED'
-  local iso_out="$OUT/kirin-$stamp-amd64$label.iso"
+  # Name and date only; failed audits are recorded in the .build.json and printed below.
+  local stamp; stamp=$(date -u +%Y%m%d)
+  local iso_out="$OUT/kirin-$stamp-amd64.iso"
   rm -f "$iso_out"
   xorriso -indev "$ISO" -outdev "$iso_out" -boot_image any replay \
     -compliance iso_9660_level=3 "${maps[@]}" -end
@@ -813,6 +813,9 @@ json.dump(record, open(out, 'w'), indent=2)
 PY
   log "Built $iso_out"
   info "$(cut -d' ' -f1 "$iso_out.sha256")"
+  if grep -q '^FAIL' "$AUDIT/summary"; then
+    info "audits that did not pass: $(awk '$1 == "FAIL" {print $2}' "$AUDIT/summary" | tr '\n' ' ')(see $AUDIT)"
+  fi
   local bytes; bytes=$(stat -c %s "$iso_out")
   info "size: $((bytes / 1000000000)) GB ($bytes bytes)"
   # A "64 GB" USB stick holds about 61.5 GB, less Ventoy's own partition.

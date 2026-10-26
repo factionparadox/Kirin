@@ -108,7 +108,6 @@ grep -q 'Status: install ok installed' <(grep -A1 'Package: openkylin-token-cent
 echo '--- 4. reviewed allowance lets the build finish'
 run --from customise --accept-inventory --allow-removal openkylin-desktop-meta > "$T/log3" 2>&1 || { cat "$T/log3"; fail 'build failed'; }
 iso=$(ls "$T"/out/kirin-*-amd64.iso)
-case "$iso" in *TEST-UNVERIFIED*) fail 'clean build labelled as test' ;; esac
 grep -q 'map .*filesystem.squashfs /casper/filesystem.squashfs' "$iso" || fail 'squashfs not mapped into ISO'
 grep -q 'boot_image any replay' "$iso" || fail 'boot records not replayed'
 grep -q 'map .*iso-boot/boot/grub/grub.cfg /boot/grub/grub.cfg' "$iso" || fail 'boot menu not mapped'
@@ -173,12 +172,14 @@ cat "$T/log2" "$T/log3" | grep -q 'SKIPPED vpn' || fail 'unreachable Proton sour
 cat "$T/log2" "$T/log3" | grep -q 'Kirin APT repository not set up yet' || fail 'missing Kirin key not reported'
 grep -q 'keeping openKylin.s live initrd' "$T/log3" || fail 'live initrd decision not reported'
 
-echo '--- 5. a policy failure blocks release but allows a labelled test build'
+echo '--- 5. a policy failure blocks release but allows a test build'
 printf 'Name[zh_CN]=Files-zh\n' >> "$R/usr/share/applications/files.desktop"
 if run --only audit > "$T/log5" 2>&1; then fail 'language failure not caught'; fi
 run --only audit --test-build > "$T/log5" 2>&1 || { cat "$T/log5"; fail 'test build audit refused'; }
 run --only pack --test-build > "$T/log5" 2>&1 || { cat "$T/log5"; fail 'test build pack refused'; }
-ls "$T"/out/kirin-*-amd64-TEST-UNVERIFIED.iso >/dev/null || fail 'test build not labelled'
+ls "$T"/out/kirin-*-amd64.iso >/dev/null || fail 'test build ISO missing'
+grep -q 'audits that did not pass: language' "$T/log5" || fail 'failed audit not reported'
+python3 -c "import glob, json, sys; r = json.load(open(glob.glob(sys.argv[1] + '/*.build.json')[0])); assert r['test_build'] and r['audits']['language'] == 'FAIL', r" "$T/out" || fail 'test build not recorded'
 
 echo '--- 6. tampering with an upstream model is never waived'
 echo tamper >> "$R/opt/kylin-ai/asr.onnx"
