@@ -1,0 +1,38 @@
+# Russian-language LibriVox recordings (public domain), fetched from the Internet Archive
+# by scripts/build/fetch-archive.py and checked against the Archive's MD5 and SHA-1.
+# The level is the earliest point at which the book is worth listening to; the
+# written texts are in the Russian Wikisource ZIM (kirin-learn read wikisource).
+# identifier<TAB>level
+#
+# A2: folk tales, fables and children's stories
+russianfairytales1_2007_librivox	A2
+russianfairytales2_2103_librivox	A2
+russianfairytales3_2412_librivox	A2
+aesops_fables_russian_0905_librivox	A2
+yaponskienarodnyeskazki_1607_librivox	A2
+stepnyyeskazki_2204_librivox	A2
+selkuncikimysinyjcar_2210_librivox	A2
+shortstories_childrenadults_1801_librivox	A2
+# B1: short classic prose
+belkintales_1406_librivox	B1
+dubrovsky_1411_librivox	B1
+childhood_2312_librivox	B1
+childhood_russian_librivox	B1
+white_nights_librivox	B1
+chelovek_2103_librivox	B1
+yuletide_stories_1812_librivox	B1
+yuletide_stories_2_1907_librivox	B1
+izbrannye_2212_librivox	B1
+selectedstories_2302_librivox	B1
+konekgorbunok_1603_librivox	B1
+# B2: novels, verse and drama
+zapiskiohotnika_2409_librivox	B2
+veshnie_vody_1607_librivox	B2
+dvoryanskoegnezdo_1906_librivox	B2
+obyknovennayaistorya_1912_librivox	B2
+notes_underground_russian	B2
+eugene_onegin_1801_librivox	B2
+woe_from_wit_ig_librivox	B2
+skazki_2110_librivox	B2
+ocherkiproshlagorazskazy_1806_librivox	B2
+obryv_1906_librivox	B2

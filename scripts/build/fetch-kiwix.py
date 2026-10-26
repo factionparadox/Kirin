@@ -67,7 +67,8 @@ def fetch(index: str, prefix: str, dest: Path, name: str | None = None) -> str:
     if not index.endswith('/'):
         index += '/'
     if not name:
-        with get(index) as response:
+        listing = index + ('index.html' if index.startswith('file://') else '')   # file:// is for tests
+        with get(listing) as response:
             name = newest(response.read().decode('utf-8', 'replace'), prefix)
     elif not re.fullmatch(re.escape(prefix) + r'\d{4}-\d{2}\.zim', name):
         raise ValueError(f'{name!r} does not match {prefix}YYYY-MM.zim')

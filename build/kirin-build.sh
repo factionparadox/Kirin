@@ -28,6 +28,12 @@ KIRIN_REPO_URL='https://factionparadox.github.io/Kirin/apt'
 DEBIAN_KEYS=${KIRIN_TEST_DEBIAN_KEYS:-"https://ftp-master.debian.org/keys/archive-key-13.asc=04B54C3CDCA79751B16BC6B5225629DF75B188BD https://ftp-master.debian.org/keys/archive-key-13-security.asc=5E04A1E3223A19A20706E20F9904613D4CCE68C6"}
 VOICES_TSV=${KIRIN_TEST_VOICES_TSV:-$REPO/packaging/russian/voices.tsv}
 LIBRARY_TSV=${KIRIN_TEST_LIBRARY_TSV:-$REPO/packaging/russian/library.tsv}
+AUDIOBOOKS_TSV=${KIRIN_TEST_AUDIOBOOKS_TSV:-$REPO/packaging/russian/audiobooks.tsv}
+ARCHIVE_BASE=${KIRIN_TEST_ARCHIVE_BASE:-https://archive.org/}
+MEZHDUNAMI_BASE=${KIRIN_TEST_MEZHDUNAMI_BASE:-https://mezhdunami.org/}
+YTDLP_URL='https://github.com/yt-dlp/yt-dlp/releases/latest/download'
+# More Kiwix ZIMs for reading at B1-B2: key|directory|prefix (the Wikipedia variant is set by --ru-wikipedia).
+KIWIX_ZIM_BASE=${KIRIN_TEST_KIWIX_ZIM_BASE:-https://download.kiwix.org/zim}
 OLLAMA_VERSION_DEFAULT='v0.40.11'
 # Kirin compatibility build of libfyaml0 (see build/chroot-steps.sh compat_libfyaml).
 FYAML_VERSION='0.9.6'
@@ -36,6 +42,7 @@ MIN_FREE_GB=${KIRIN_MIN_FREE_GB:-70}
 
 ISO='' ISO_SHA256='' WORK="$PWD/work" OUT="$PWD/out" SQUASHFS_REL=''
 MODEL_INVENTORY='' ACCEPT_INVENTORY=0 TEST_BUILD=0 FROM='' ONLY='' NO_RUSSIAN=0 KIWIX_NAME='' NO_EXTRA_REPOS=0
+RU_WIKIPEDIA=mini
 OLLAMA_VERSION=$OLLAMA_VERSION_DEFAULT
 ALLOW_REMOVAL=()
 
@@ -62,6 +69,8 @@ Options:
   --no-russian            Leave out the Russian tutor model, voices, course library and dictionary
   --no-extra-repos        Do not add the pinned Ubuntu 26.04 and Debian 13 repositories
   --kiwix-name FILE       Pin the Wiktionary ZIM (e.g. ${KIWIX_PREFIX}2026-09.zim) instead of the newest
+  --ru-wikipedia KIND     Russian Wikipedia ZIM: mini (default: every article's introduction, a few GB),
+                          nopic (full articles, ~10 GB), maxi (with pictures, ~30 GB) or none
   --test-build            Produce an ISO even if policy audits fail; named TEST-UNVERIFIED.
                           The AI-model contract is never relaxed.
   --from STAGE            Re-run from STAGE onwards
@@ -85,6 +94,9 @@ while [ $# -gt 0 ]; do
     --no-russian) NO_RUSSIAN=1; shift ;;
     --no-extra-repos) NO_EXTRA_REPOS=1; shift ;;
     --kiwix-name) KIWIX_NAME=$2; shift 2 ;;
+    --ru-wikipedia)
+      case "$2" in nopic|maxi|mini|none) RU_WIKIPEDIA=$2 ;; *) echo '--ru-wikipedia takes nopic, maxi, mini or none' >&2; exit 2 ;; esac
+      shift 2 ;;
     --from) FROM=$2; shift 2 ;;
     --only) ONLY=$2; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -397,6 +409,61 @@ fetch_russian() {
         --dest "$r/dictionary" ${KIWIX_NAME:+--name "$KIWIX_NAME"}) || die 'could not fetch the Wiktionary ZIM'
   printf '%s\n' "$zim" > "$r/dictionary.name"
   info "dictionary: $zim (checksum verified)"
+  fetch_reading_zims
+  info 'fetching Russian audiobooks (LibriVox, via the Internet Archive; several GB)'
+  python3 "$REPO/scripts/build/fetch-archive.py" --manifest "$AUDIOBOOKS_TSV" --dest "$r/audiobooks" \
+      --base "$ARCHIVE_BASE" |& sed 's/^/    /' || die 'the audiobook manifest could not be processed'
+  fetch_mezhdunami
+}
+
+# Russian Wiktionary, Wikisource and Wikipedia. Each is optional: a missing one is reported.
+fetch_reading_zims() {
+  local r="$PAYLOADS/russian" entry key dir prefix zim
+  local -a zims=("wiktionary-ru|wiktionary|wiktionary_ru_all_nopic_" "wikisource|wikisource|wikisource_ru_all_nopic_")
+  [ "$RU_WIKIPEDIA" = none ] || zims+=("wikipedia|wikipedia|wikipedia_ru_all_${RU_WIKIPEDIA}_")
+  : > "$r/kiwix.list.new"
+  for entry in "${zims[@]}"; do
+    IFS='|' read -r key dir prefix <<< "$entry"
+    info "fetching $prefix* (Kiwix)"
+    if zim=$(python3 "$REPO/scripts/build/fetch-kiwix.py" --index "$KIWIX_ZIM_BASE/$dir/" --prefix "$prefix" --dest "$r/dictionary"); then
+      printf '%s\t%s\n' "$key" "$zim" >> "$r/kiwix.list.new"
+      info "$key: $zim (checksum verified)"
+    else
+      info "not available: $prefix (left out)"
+    fi
+  done
+  # ZIMs no longer wanted (for example after --ru-wikipedia none) are removed.
+  local f
+  for f in "$r"/dictionary/*.zim; do
+    [ -e "$f" ] || continue
+    case "$(basename "$f")" in "$(cat "$r/dictionary.name")") continue ;; esac
+    cut -f2 "$r/kiwix.list.new" | grep -qxF "$(basename "$f")" || { rm -f "$f"; info "removed $(basename "$f")"; }
+  done
+  mv -f "$r/kiwix.list.new" "$r/kiwix.list"
+}
+
+# yt-dlp (for the textbook's SoundCloud audio), checked against its release's SHA2-256SUMS.
+fetch_ytdlp() {
+  local dir="$PAYLOADS/yt-dlp" want
+  mkdir -p "$dir"
+  curl -fsSL "$YTDLP_URL/SHA2-256SUMS" -o "$dir/SHA2-256SUMS" || return 1
+  want=$(awk '$2 == "yt-dlp" {print $1}' "$dir/SHA2-256SUMS")
+  [ -n "$want" ] || return 1
+  if [ ! -f "$dir/yt-dlp" ] || [ "$(sha256sum "$dir/yt-dlp" | cut -d' ' -f1)" != "$want" ]; then
+    curl -fsSL "$YTDLP_URL/yt-dlp" -o "$dir/yt-dlp" || return 1
+  fi
+  [ "$(sha256sum "$dir/yt-dlp" | cut -d' ' -f1)" = "$want" ] || return 1
+  echo "python3 $dir/yt-dlp"
+}
+
+fetch_mezhdunami() {
+  local r="$PAYLOADS/russian" ytdlp=${KIRIN_TEST_YTDLP:-}
+  info 'copying the Между нами textbook and its audio for offline use'
+  if [ -z "$ytdlp" ]; then
+    ytdlp=$(fetch_ytdlp) || { ytdlp=''; info 'yt-dlp unavailable: the textbook is copied without its audio'; }
+  fi
+  python3 "$REPO/scripts/build/fetch-mezhdunami.py" --base "$MEZHDUNAMI_BASE" --dest "$r/mezhdunami" \
+      ${ytdlp:+--ytdlp "$ytdlp"} |& sed 's/^/    /' || info 'Между нами not available (left out)'
 }
 
 
@@ -462,17 +529,26 @@ install_russian() {
   mkdir -p "$dest" "$ROOTFS/opt/kirin"
   cp -a "$PAYLOADS/piper-$PIPER_VERSION/root/piper" "$ROOTFS/opt/kirin/piper"
   local part
-  for part in voices library dictionary; do
+  for part in voices library dictionary audiobooks mezhdunami; do
+    [ -d "$r/$part" ] || continue
     cp -al "$r/$part" "$dest/$part" 2>/dev/null || cp -a "$r/$part" "$dest/$part"
   done
   find "$dest" -name '*.part' -delete
   install -m 0644 "$PAYLOADS/tutor-blobs.json" "$ROOTFS/usr/share/kirin/tutor-blobs.json"
-  python3 - "$ROOTFS/usr/share/kirin/russian.json" "$TUTOR_TAG" "$RUSSIAN_DIR" "$(cat "$r/dictionary.name")" <<'PY'
+  [ -f "$r/kiwix.list" ] || : > "$r/kiwix.list"
+  python3 - "$ROOTFS/usr/share/kirin/russian.json" "$TUTOR_TAG" "$RUSSIAN_DIR" "$(cat "$r/dictionary.name")" "$r/kiwix.list" <<'PY'
 import json, sys
-out, model, root, zim = sys.argv[1:]
+out, model, root, zim, listing = sys.argv[1:]
+kiwix = {'wiktionary': f'{root}/dictionary/{zim}'}
+for line in open(listing, encoding='utf-8'):
+    if '\t' in line:
+        key, name = line.rstrip('\n').split('\t', 1)
+        kiwix[key] = f'{root}/dictionary/{name}'
 json.dump({'model': model, 'root': root, 'piper': '/opt/kirin/piper/piper',
            'voices': root + '/voices', 'library': root + '/library',
-           'dictionary': f'{root}/dictionary/{zim}'}, open(out, 'w'), indent=2)
+           'dictionary': f'{root}/dictionary/{zim}', 'kiwix': kiwix,
+           'audiobooks': root + '/audiobooks', 'mezhdunami': root + '/mezhdunami',
+           'vocab': '/usr/share/kirin/russian/vocab.tsv'}, open(out, 'w'), indent=2)
 PY
 }
 
@@ -488,6 +564,18 @@ audit_russian() {
   if [ -s "$dest/library/SHA256SUMS" ]; then (cd "$dest/library" && sha256sum --quiet -c SHA256SUMS) || ok=1; fi
   echo "library: $(wc -l < "$dest/library/SHA256SUMS") files"
   ls "$dest/dictionary/"*.zim >/dev/null 2>&1 || { echo 'Wiktionary ZIM missing'; ok=1; }
+  echo "reading: $(cut -f1 "$PAYLOADS/russian/kiwix.list" 2>/dev/null | tr '\n' ' ')"
+  # Audiobooks and the Между нами copy are optional; whatever is there must be intact.
+  local part
+  for part in audiobooks mezhdunami; do
+    if [ -s "$dest/$part/SHA256SUMS" ]; then
+      (cd "$dest/$part" && sha256sum --quiet -c SHA256SUMS) || ok=1
+      echo "$part: $(wc -l < "$dest/$part/SHA256SUMS") files"
+    else
+      echo "$part: not included"
+    fi
+  done
+  [ -f "$ROOTFS/usr/share/kirin/russian/vocab.tsv" ] || { echo 'Russian word list missing'; ok=1; }
   [ -f "$ROOTFS/usr/share/kirin/russian.json" ] || { echo 'russian.json missing'; ok=1; }
   return "$ok"
 }
@@ -725,6 +813,13 @@ json.dump(record, open(out, 'w'), indent=2)
 PY
   log "Built $iso_out"
   info "$(cut -d' ' -f1 "$iso_out.sha256")"
+  local bytes; bytes=$(stat -c %s "$iso_out")
+  info "size: $((bytes / 1000000000)) GB ($bytes bytes)"
+  # A "64 GB" USB stick holds about 61.5 GB, less Ventoy's own partition.
+  if [ "$bytes" -gt 61000000000 ]; then
+    info 'WARNING: this ISO will not fit a 64 GB USB stick. Rebuild the Russian extras smaller, for example:'
+    info "  sudo $0 --iso '$ISO' --from payloads --accept-inventory --ru-wikipedia none"
+  fi
 }
 
 # The live session boots from the ISO's own initrd, not the image's. If the

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Russian Study Path
+Name[ru]=План изучения русского
+Comment=What to study at each level, A1 to B2
+Comment[ru]=Что изучать на каждом уровне, от A1 до B2
+Exec=kirin-learn --pause path
+Icon=view-list-symbolic
+Terminal=true
+Categories=Education;Languages;

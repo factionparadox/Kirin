@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Russian Wikipedia
+Name[ru]=Википедия на русском
+Comment=Russian Wikipedia offline, for B1-B2 reading
+Comment[ru]=Русская Википедия без интернета
+Exec=kirin-learn read wikipedia
+Icon=internet-web-browser
+Terminal=false
+Categories=Education;Languages;

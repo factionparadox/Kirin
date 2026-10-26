@@ -49,6 +49,10 @@ class KirinLearnTests(unittest.TestCase):
             self.assertTrue((Path(td)/'usr/share/applications/kirin-russian-tutor.desktop').exists())
             self.assertTrue((Path(td)/'usr/bin/kirin-welcome').exists())
             self.assertTrue((Path(td)/'etc/xdg/autostart/kirin-welcome.desktop').exists())
+            vocab = (Path(td)/'usr/share/kirin/russian/vocab.tsv').read_text(encoding='utf-8')
+            self.assertEqual(sum(1 for l in vocab.splitlines() if l and not l.startswith('#')), 10000)
+            for name in ('words', 'audiobooks', 'path', 'wikisource', 'wikipedia'):
+                self.assertTrue((Path(td)/f'usr/share/applications/kirin-russian-{name}.desktop').exists(), name)
 
 
 class FakeResponse(io.BytesIO):
@@ -117,6 +121,99 @@ class RussianTests(unittest.TestCase):
     def test_missing_dictionary_is_reported(self):
         with contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(learn.main(['dictionary']), 1)
+
+
+class VocabTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        words = self.root / 'vocab.tsv'
+        words.write_text('# header\n1\tA1\tother\tда\tyes\t\n2\tA1\tnoun\tмолоко́\tmilk\tneut.\n'
+                         '3\tA2\tverb\tидти́\tgo\timpf.\n4\tB1\tnoun\tёж\thedgehog\tmasc.\n', encoding='utf-8')
+        config = self.root / 'russian.json'
+        config.write_text(json.dumps({'vocab': str(words), 'audiobooks': str(self.root / 'books'),
+                                      'mezhdunami': str(self.root / 'mn'), 'kiwix': {}}))
+        for name, value in (('RUSSIAN_CONFIG', config), ('VOCAB_STATE', self.root / 'state/vocab.json')):
+            p = patch.object(learn, name, value); p.start(); self.addCleanup(p.stop)
+
+    def drill(self, answers, **kw):
+        replies = iter(answers)
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            learn.vocab(ask=lambda prompt: next(replies), **kw)
+        return out.getvalue(), json.loads(learn.VOCAB_STATE.read_text(encoding='utf-8'))
+
+    def test_new_words_come_from_the_level_and_below(self):
+        import datetime
+        today = datetime.date(2026, 10, 26)
+        _, state = self.drill(['', 'y', '', 'n'], level='A1', new=5, today=today)
+        self.assertEqual(set(state), {'да|other', 'молоко́|noun'})
+        self.assertEqual(state['да|other'], {'box': 1, 'seen': 1, 'due': '2026-10-27'})
+        self.assertEqual(state['молоко́|noun']['box'], 1)
+
+    def test_known_words_move_up_and_wrong_ones_go_back(self):
+        import datetime
+        day = datetime.date(2026, 10, 26)
+        self.drill(['', 'y'], level='A1', new=1, today=day)
+        _, state = self.drill(['', 'y'], level='A1', new=0, today=day + datetime.timedelta(days=1))
+        self.assertEqual(state['да|other']['box'], 2)
+        self.assertEqual(state['да|other']['due'], '2026-10-29')
+        _, state = self.drill(['', 'n'], level='A1', new=0, today=day + datetime.timedelta(days=3))
+        self.assertEqual(state['да|other']['box'], 1)
+
+    def test_reverse_accepts_missing_stress_and_yo(self):
+        out, state = self.drill(['да', 'молоко', 'идти', 'еж'], level='B1', new=4, reverse=True)
+        self.assertEqual(out.count('  yes: '), 4)
+        out, _ = self.drill(['нет'] + ['q'], level='B1', new=0, reverse=True,
+                            today=__import__('datetime').date.today() + __import__('datetime').timedelta(days=5))
+        self.assertIn('  no: да', out)
+
+    def test_quit_saves_progress(self):
+        out, state = self.drill(['', 'y', 'q'], level='A2', new=3)
+        self.assertEqual(list(state), ['да|other'])
+
+    def test_stats_and_path(self):
+        self.drill(['', 'y'], level='A1', new=1)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            learn.main(['vocab', '--stats'])
+            learn.main(['path'])
+        self.assertIn('A1:     0/2 mastered, 0 learned, 1 started', out.getvalue())
+        self.assertIn('B2  Confident Russian', out.getvalue())
+        self.assertIn('kirin-learn read mezhdunami', out.getvalue())
+
+    def test_listen_lists_and_plays_by_level(self):
+        books = self.root / 'books'
+        (books / 'A2/Сказки - Afanasyev').mkdir(parents=True)
+        (books / 'catalog.json').write_text(json.dumps([
+            {'id': 'a', 'level': 'A2', 'title': 'Сказки', 'creator': 'Afanasyev', 'runtime': '2:00:00',
+             'folder': 'A2/Сказки - Afanasyev', 'files': ['1.mp3']},
+            {'id': 'b', 'level': 'B2', 'title': 'Обрыв', 'creator': 'Goncharov', 'runtime': '', 'folder': 'B2/x', 'files': []}]))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            learn.listen('A2')
+        self.assertIn('[A2] Сказки - Afanasyev', out.getvalue())
+        self.assertNotIn('Обрыв', out.getvalue())
+        with patch.object(learn.shutil, 'which', lambda n: '/usr/bin/vlc' if n == 'vlc' else None), \
+             patch.object(learn.subprocess, 'call', return_value=0) as call:
+            learn.listen('A2', 1)
+        self.assertEqual(call.call_args[0][0][-1], str(books / 'A2/Сказки - Afanasyev'))
+
+    def test_read_opens_kiwix_or_reports(self):
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(learn.main(['read', 'wikipedia']), 1)
+        zim = self.root / 'ws.zim'; zim.write_bytes(b'zim')
+        cfg = json.loads(learn.RUSSIAN_CONFIG.read_text()); cfg['kiwix'] = {'wikisource': str(zim)}
+        learn.RUSSIAN_CONFIG.write_text(json.dumps(cfg))
+        with patch.object(learn.subprocess, 'call', return_value=0) as call:
+            learn.read('wikisource')
+        call.assert_called_once_with(['flatpak', 'run', 'org.kiwix.desktop', str(zim)])
+
+    def test_real_word_list_is_banded(self):
+        words = learn.load_vocab(ROOT / 'packaging/russian/vocab.tsv')
+        counts = {lvl: sum(w['level'] == lvl for w in words) for lvl in learn.VOCAB_LEVELS}
+        self.assertEqual(counts, {'A1': 780, 'A2': 520, 'B1': 1000, 'B2': 7700})
+        self.assertEqual(len({w['key'] for w in words}), len(words))
 
 
 def subprocess_result(code):

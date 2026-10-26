@@ -29,7 +29,7 @@ Inspired by [Archon/Cognoscenti](https://github.com/factionparadox/Archon), Kiri
 | Desktop defaults | Welcome to Kirin on first login; taskbar pins; LibreOffice and VLC as default apps (WPS Office removed); kitty terminal (translucent, blurred) with fish; Fastfetch in new terminals; hostname `kirin` |
 | Web apps | Planned Web App Studio for ChatGPT, Claude and arbitrary websites |
 | Learning | Kirin Learn, offline lessons, Vim, Neovim and native tutors |
-| Russian study | Local AI tutor (Qwen3 30B), Piper Russian voices, public-domain DLI/FSI/Peace Corps courses, offline Wiktionary ([Russian learning kit](docs/RUSSIAN.md)) |
+| Russian study (A1 to B2) | Local AI tutor (Qwen3 30B), the *Между нами* textbook with audio, FSI/DLI/Peace Corps courses, 10,000-word spaced-repetition drill, LibriVox audiobooks, Russian Wikisource, Wikipedia and Wiktionary, Piper voices ([Russian learning kit](docs/RUSSIAN.md)) |
 | Language | British English (en_GB.UTF-8) default; Russian (ru_RU.UTF-8) supported |
 | Accounts | Local Linux accounts only; no mandatory Kylin ID, token centre, cloud sync or device registration |
 | Init and security | systemd retained, with downstream birthDate field removal required; no SELinux requirement |

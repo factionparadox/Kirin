@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Mezhdu nami (Russian Textbook)
+Name[ru]=Между нами (учебник)
+Comment=First-year Russian textbook with audio, offline
+Comment[ru]=Учебник русского языка первого года с аудио
+Exec=kirin-learn read mezhdunami
+Icon=accessories-text-editor
+Terminal=false
+Categories=Education;Languages;

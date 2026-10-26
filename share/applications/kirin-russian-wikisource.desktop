@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Russian Literature (Wikisource)
+Name[ru]=Викитека
+Comment=Russian classics to read offline
+Comment[ru]=Русская классика без интернета
+Exec=kirin-learn read wikisource
+Icon=x-office-document
+Terminal=false
+Categories=Education;Languages;

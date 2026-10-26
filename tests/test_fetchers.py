@@ -22,6 +22,8 @@ def load(name):
 
 files = load('fetch-files')
 kiwix = load('fetch-kiwix')
+archive = load('fetch-archive')
+mezhdu = load('fetch-mezhdunami')
 
 
 def quiet(fn, *args):
@@ -153,3 +155,104 @@ class TestFetchKiwix(Server):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestFetchArchive(Server):
+    def item(self, ident, language='rus', tracks=(('01_x_64kb.mp3', b'one'), ('02_x_64kb.mp3', b'two'))):
+        files_meta = []
+        for name, data in tracks:
+            self.publish(f'download/{ident}/{name}', data)
+            files_meta.append({'name': name, 'format': '64Kbps MP3', 'md5': hashlib.md5(data).hexdigest(),
+                               'sha1': hashlib.sha1(data).hexdigest()})
+        files_meta.append({'name': 'big.mp3', 'format': '128Kbps MP3', 'md5': 'x', 'sha1': 'y'})
+        self.publish(f'metadata/{ident}', json.dumps({'metadata': {'title': 'Повести Белкина', 'creator': 'Пушкин',
+                     'language': language, 'runtime': '3:00:00'}, 'files': files_meta}).encode())
+
+    def run_fetch(self, rows, *extra):
+        m = self.base / 'books.tsv'
+        m.write_text('# x\n' + ''.join(f'{i}\t{l}\n' for i, l in rows), encoding='utf-8')
+        out = self.base / 'out'
+        return quiet(archive.main, ['--manifest', str(m), '--dest', str(out), '--base', self.url, *extra]), out
+
+    def test_downloads_verified_tracks_and_catalog(self):
+        self.item('belkin')
+        self.item('english', language='eng')
+        rc, out = self.run_fetch([('belkin', 'B1'), ('english', 'A2'), ('gone', 'B2')])
+        self.assertEqual(rc, 0)
+        cat = json.loads((out / 'catalog.json').read_text(encoding='utf-8'))
+        self.assertEqual([b['id'] for b in cat], ['belkin'])
+        folder = out / cat[0]['folder']
+        self.assertEqual(sorted(p.name for p in folder.iterdir()), ['01_x_64kb.mp3', '02_x_64kb.mp3'])
+        self.assertTrue(str(cat[0]['folder']).startswith('B1/Повести Белкина - Пушкин'))
+        self.assertIn('B1/Повести Белкина - Пушкин/01_x_64kb.mp3', (out / 'SHA256SUMS').read_text(encoding='utf-8'))
+        self.assertEqual(self.run_fetch([('gone', 'B2')], '--required')[0], 1)
+
+    def test_tampered_track_refused(self):
+        self.item('belkin')
+        self.publish('download/belkin/02_x_64kb.mp3', b'tampered')
+        rc, out = self.run_fetch([('belkin', 'B1')])
+        self.assertEqual(json.loads((out / 'catalog.json').read_text()), [])
+        self.assertFalse(list(out.rglob('*.part')))
+
+    def test_bad_manifest(self):
+        with self.assertRaises(ValueError):
+            archive.read_manifest(self.manifest_file('x\tZ9\n'))
+        with self.assertRaises(ValueError):
+            archive.read_manifest(self.manifest_file('../x\tA1\n'))
+
+    def manifest_file(self, text):
+        m = self.base / 'bad.tsv'; m.write_text(text); return m
+
+    def test_real_audiobook_manifest(self):
+        rows = archive.read_manifest(Path(__file__).resolve().parents[1] / 'packaging/russian/audiobooks.tsv')
+        self.assertGreaterEqual(len(rows), 25)
+        self.assertEqual({l for _, l in rows}, {'A2', 'B1', 'B2'})
+
+
+class TestFetchMezhdunami(Server):
+    def build_site(self):
+        self.publish('index.shtml', b'<html><link href="/css/s.css" rel="stylesheet">'
+                     b'<script src="https://cdn.example.invalid/x.js"></script>'
+                     b'<a href="unit01/1_1/index.shtml#top">1.1</a> <a href="/pdfs/v1.pdf">pdf</a>'
+                     b'<a href="https://elsewhere.example/">out</a></html>')
+        self.publish('css/s.css', b'body{background:url("../img/bg.png")}')
+        self.publish('img/bg.png', b'PNG')
+        self.publish('pdfs/v1.pdf', b'%PDF')
+        self.publish('unit01/1_1/index.shtml', '<p>Привет</p><img src="img/a.png">'
+                     '<iframe width="100%" src="https://w.soundcloud.com/player/?url=http%3A%2F%2Fapi.soundcloud.com'
+                     '%2Ftracks%2F111&amp;color=x"></iframe>'
+                     '<iframe src="https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/222"></iframe>'
+                     '<a href="../../index.shtml">home</a>'.encode())
+        self.publish('unit01/1_1/img/a.png', b'PNG')
+
+    def fake_ytdlp(self):
+        script = self.base / 'ytdlp.py'
+        script.write_text('import sys, re\nargs = sys.argv[1:]\nout = args[args.index("-o") + 1]\n'
+                          'for url in open(args[args.index("-a") + 1]):\n'
+                          '    tid = re.search(r"(\\d+)$", url.strip()).group(1)\n'
+                          '    if tid == "111": open(out.replace("%(id)s", tid).replace("%(ext)s", "mp3"), "w").write("a")\n')
+        return f'python3 {script}'
+
+    def test_offline_copy_with_local_audio(self):
+        self.build_site()
+        dest = self.base / 'mn'
+        rc = quiet(mezhdu.main, ['--base', self.url + 'index.shtml', '--dest', str(dest), '--ytdlp', self.fake_ytdlp()])
+        self.assertEqual(rc, 0)
+        index = (dest / 'index.html').read_text(encoding='utf-8')
+        self.assertIn('href="unit01/1_1/index.html#top"', index)
+        self.assertIn('href="pdfs/v1.pdf"', index)
+        self.assertIn('href="https://elsewhere.example/"', index)        # outside links kept
+        self.assertIn('href="css/s.css"', index)
+        self.assertTrue((dest / 'pdfs/v1.pdf').is_file())
+        self.assertIn('url("../img/bg.png")', (dest / 'css/s.css').read_text())
+        self.assertTrue((dest / 'img/bg.png').is_file())
+        lesson = (dest / 'unit01/1_1/index.html').read_text(encoding='utf-8')
+        self.assertIn('<audio controls preload="none" src="../../audio/111.mp3">', lesson)
+        self.assertIn('not in the offline copy', lesson)                 # track 222 failed
+        self.assertNotIn('soundcloud', lesson)
+        self.assertIn('href="../../index.html"', lesson)
+        self.assertIn('CC BY-NC-ND', (dest / 'KIRIN-README.txt').read_text(encoding='utf-8').replace('Creative Commons BY-NC-ND', 'CC BY-NC-ND'))
+        self.assertIn('unit01/1_1/img/a.png', (dest / 'SHA256SUMS').read_text())
+
+    def test_unreachable_site_fails(self):
+        self.assertEqual(quiet(mezhdu.main, ['--base', self.url + 'missing/', '--dest', str(self.base / 'x')]), 1)

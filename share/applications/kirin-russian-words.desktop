@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Russian Words
+Name[ru]=Русские слова
+Comment=Learn 10,000 Russian words, A1 to B2, with spaced repetition
+Comment[ru]=10 000 слов от A1 до B2 с интервальными повторениями
+Exec=kirin-learn --pause vocab --say
+Icon=accessories-dictionary
+Terminal=true
+Categories=Education;Languages;

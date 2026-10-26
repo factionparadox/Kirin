@@ -59,6 +59,24 @@ printf 'textbook' > "$SITE/book.pdf"
 printf 'DLI Russian Basic Course/Mod 01.pdf\tfile://%s/book.pdf\nDLI Russian Basic Course/Gone.pdf\tfile://%s/missing.pdf\n' \
   "$SITE" "$SITE" > "$T/library.tsv"
 printf 'dictionary' > "$SITE/$ZIM"; printf '%s  %s\n' "$(sha256sum "$SITE/$ZIM" | cut -d' ' -f1)" "$ZIM" > "$SITE/$ZIM.sha256"
+# Extra reading ZIMs: Wikisource is published, the Russian Wiktionary and Wikipedia are not.
+WS=wikisource_ru_all_nopic_2019-08.zim; mkdir -p "$SITE/zim/wikisource"
+printf 'literature' > "$SITE/zim/wikisource/$WS"
+printf '%s  %s\n' "$(sha256sum "$SITE/zim/wikisource/$WS" | cut -d' ' -f1)" "$WS" > "$SITE/zim/wikisource/$WS.sha256"
+printf '<a href="%s">%s</a>\n' "$WS" "$WS" > "$SITE/zim/wikisource/index.html"
+# Audiobooks: one published item and one that has gone.
+mkdir -p "$SITE/archive/metadata" "$SITE/archive/download/testbook"
+printf 'track one' > "$SITE/archive/download/testbook/t01_64kb.mp3"
+python3 - "$SITE/archive/metadata/testbook" "$SITE/archive/download/testbook/t01_64kb.mp3" <<'PY'
+import hashlib, json, sys
+data = open(sys.argv[2], 'rb').read()
+json.dump({'metadata': {'title': 'Сказки', 'creator': 'Afanasyev', 'language': 'rus', 'runtime': '0:01'},
+           'files': [{'name': 't01_64kb.mp3', 'format': '64Kbps MP3', 'md5': hashlib.md5(data).hexdigest(),
+                      'sha1': hashlib.sha1(data).hexdigest()}]}, open(sys.argv[1], 'w'))
+PY
+printf 'testbook\tA2\ngonebook\tB1\n' > "$T/audiobooks.tsv"
+export KIRIN_TEST_AUDIOBOOKS_TSV="$T/audiobooks.tsv" KIRIN_TEST_ARCHIVE_BASE="file://$SITE/archive/"
+export KIRIN_TEST_KIWIX_ZIM_BASE="file://$SITE/zim" KIRIN_TEST_MEZHDUNAMI_BASE="file://$SITE/no-such-site/" KIRIN_TEST_YTDLP=true
 FIX="$REPO/tests/fixtures"
 KIRIN_TEST_DEBIAN_KEYS="file://$FIX/test-key-rsa.asc=$(head -1 "$FIX/test-key-fingerprints.txt")"
 export KIRIN_TEST_DEBIAN_KEYS
@@ -124,6 +142,12 @@ RU="$R/opt/kirin/russian"
 [ -f "$RU/library/DLI Russian Basic Course/Mod 01.pdf" ] && [ ! -e "$RU/library/DLI Russian Basic Course/Gone.pdf" ] ||
   fail 'library not installed (or a missing book was not skipped)'
 [ -f "$RU/dictionary/$ZIM" ] || fail 'dictionary not installed'
+[ -f "$RU/dictionary/$WS" ] || fail 'Wikisource ZIM not installed'
+grep -q '"wikisource": "/opt/kirin/russian/dictionary/'"$WS"'"' "$R/usr/share/kirin/russian.json" || fail 'Wikisource not in russian.json'
+grep -q '"wikipedia"' "$R/usr/share/kirin/russian.json" && fail 'unavailable Wikipedia listed in russian.json'
+ls "$RU/audiobooks/A2/"*/t01_64kb.mp3 >/dev/null 2>&1 || fail 'audiobook not installed'
+grep -q 'not available: gonebook' "$T"/log* || fail 'missing audiobook not reported'
+[ -f "$R/usr/share/kirin/russian/vocab.tsv" ] || fail 'Russian word list not installed'
 python3 -c 'import json,sys; c=json.load(open(sys.argv[1])); assert c["model"].startswith("qwen3:30b"), c' \
   "$R/usr/share/kirin/russian.json" || fail 'russian.json wrong'
 grep -q 'PASS russian' "$T/work/audit/summary" || fail 'russian audit did not pass'

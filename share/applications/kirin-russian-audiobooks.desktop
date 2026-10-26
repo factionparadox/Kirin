@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Russian Audiobooks
+Name[ru]=Аудиокниги на русском
+Comment=Russian literature read aloud, sorted by level
+Comment[ru]=Русская литература вслух, по уровням
+Exec=kirin-learn --pause listen --pick
+Icon=audio-x-generic
+Terminal=true
+Categories=Education;Languages;

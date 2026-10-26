@@ -12,6 +12,8 @@ install -D -m 0644 "$here/share/autostart/kirin-welcome.desktop" "$root/etc/xdg/
 for lesson in "$here"/lessons/*.md; do
   install -D -m 0644 "$lesson" "$root/usr/share/kirin/learn/topics/$(basename "$lesson")"
 done
+install -D -m 0644 "$here/packaging/russian/vocab.tsv" "$root/usr/share/kirin/russian/vocab.tsv"
+install -D -m 0644 "$here/packaging/russian/VOCAB-SOURCES.md" "$root/usr/share/kirin/russian/VOCAB-SOURCES.md"
 install -D -m 0644 "$here/share/nvim/site/tutor/kirin-01-basics.tutor" "$root/usr/share/nvim/site/tutor/kirin-01-basics.tutor"
 for launcher in "$here"/share/applications/*.desktop; do
   install -D -m 0644 "$launcher" "$root/usr/share/applications/$(basename "$launcher")"
