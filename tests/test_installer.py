@@ -29,12 +29,35 @@ msg "设置用户 ${USERNAME}"
 #    	msg "更新 initramfs"
 echo "ghost镜像在磁盘跟目录"
 '''
-INI = '''[config]
-automatic-installation = 1
-enable-swapfile=true; 使用 swapfile
+CFG = '''[config]
+automatic-installation=1
+# 使用 swapfile 替代swap分区，false 为不使用 swapfile，990/9A0 使用swapfile
+enable-swapfile=false
+[custompartition]
+custom-partitions="efi;boot;root;backup;data;swap;"
+custom-swap="fs=linux-swap;mount=[swap];size=default;"
 [setting]
-EnableSwap = true
-FileSystem="ext4;linux-swap"
+EnableSwap=false
+'''
+SIZES = '''ram=$(cat < /proc/meminfo  | grep ^MemTotal: | awk '{print $2}')
+
+### swap
+swap=$(( ram * 12 / 1024 / 10 ))
+if [ $swap -gt 64000 ]; then
+    swap=64000
+fi
+'''
+SWAPFILE = '''#!/bin/bash
+
+set -e
+
+is_automatic=$(get_value automatic-installation)
+'''
+GENFSTAB = '''  while read -r device type _ _ prio; do
+    # skip files marked deleted by the kernel
+    [[ $device = *'\\040(deleted)' ]] && continue
+
+    if [[ $type = file ]]; then
 '''
 
 
@@ -46,8 +69,12 @@ class TestInstaller(unittest.TestCase):
         s.mkdir(parents=True)
         self.script = s / '16copy-basic-filesystem'
         self.script.write_text(SCRIPT); self.script.chmod(0o755)
-        self.ini = self.root / ki.INSTALLER / 'systemsetting.ini'
-        self.ini.write_text(INI)
+        self.files = {}
+        for rel, text in [(ki.CFGS[0], CFG), (ki.CFGS[1], CFG), (f'{ki.INSTALLER}/data/systemdatasize.sh', SIZES),
+                          (f'{ki.SCRIPTS}/autopart.sh', SIZES), (f'{ki.SCRIPTS}/autopart-efi.sh', SIZES),
+                          (f'{ki.SCRIPTS}/prepare/18setup-swapfile', SWAPFILE), (f'{ki.SCRIPTS}/in_chroot/genfstab', GENFSTAB)]:
+            f = self.root / rel; f.parent.mkdir(parents=True, exist_ok=True); f.write_text(text)
+            self.files[rel] = f
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -70,21 +97,31 @@ class TestInstaller(unittest.TestCase):
         self.assertIn('msg "Skipping $i"', text)
         self.assertIn('#    	msg "更新 initramfs"', text)   # comments left alone
         self.assertEqual(self.script.stat().st_mode & 0o777, 0o755)
-        ini = self.ini.read_text()
-        self.assertIn('enable-swapfile=false; 使用 swapfile', ini)
-        self.assertIn('EnableSwap = false', ini)
-        self.assertIn('FileSystem="ext4;linux-swap"', ini)
+        for c in ki.CFGS:
+            cfg = self.files[c].read_text()
+            self.assertIn('\nenable-swapfile=true\n', cfg)
+            self.assertIn('custom-partitions="efi;boot;root;backup;data;"', cfg)
+        for rel in ('data/systemdatasize.sh', 'scripts/autopart.sh', 'scripts/autopart-efi.sh'):
+            sizes = self.files[f'{ki.INSTALLER}/{rel}'].read_text()
+            self.assertIn('\nswap=0   # Kirin:', sizes)
+            self.assertNotIn('ram * 12', sizes)
+        self.assertIn('set -e\nreturn 0   # Kirin: no swap file\n\nis_automatic',
+                      self.files[f'{ki.SCRIPTS}/prepare/18setup-swapfile'].read_text())
+        fstab = self.files[f'{ki.SCRIPTS}/in_chroot/genfstab'].read_text()
+        self.assertIn("continue\n    [[ $device = /dev/zram* ]] && continue   # Kirin", fstab)
 
     def test_apply_is_idempotent(self):
         ki.apply(self.root)
-        first = self.script.read_text(), self.ini.read_text()
-        ki.apply(self.root)
-        self.assertEqual(first, (self.script.read_text(), self.ini.read_text()))
+        first = [f.read_text() for f in [self.script, *self.files.values()]]
+        notes = ki.apply(self.root)
+        self.assertFalse([n for n in notes if n.startswith('no swap')], notes)
+        self.assertEqual(first, [f.read_text() for f in [self.script, *self.files.values()]])
 
-    def test_missing_swap_setting_is_reported(self):
-        self.ini.unlink()
-        self.assertIn('WARNING: no installer setting for swap found (EnableSwap / enable-swapfile)', ki.apply(self.root))
-        self.assertTrue(any('no installer swap setting' in p for p in ki.audit(self.root)))
+    def test_changed_upstream_is_reported(self):
+        f = self.files[f'{ki.SCRIPTS}/autopart-efi.sh']
+        f.write_text(SIZES.replace('ram * 12', 'ram * 15'))
+        self.assertTrue(any('autopart-efi.sh has changed upstream' in n for n in ki.apply(self.root)))
+        self.assertTrue(any('autopart-efi.sh: changed upstream' in p for p in ki.audit(self.root)))
 
     def test_no_installer_is_fine(self):
         with tempfile.TemporaryDirectory() as d:

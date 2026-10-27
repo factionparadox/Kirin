@@ -35,7 +35,15 @@ if a[0] == '-d':
     os.symlink('../run/systemd/resolve/stub-resolv.conf', r / 'etc/resolv.conf')
     # openKylin's graphical installer: a swap setting and a Chinese fallback message.
     (r / 'usr/share/kylin-os-installer/scripts/prepare').mkdir(parents=True)
-    (r / 'usr/share/kylin-os-installer/systemsetting.ini').write_text('[setting]\nEnableSwap=true\n')
+    I = r / 'usr/share/kylin-os-installer'
+    for d in ('data', 'scripts/in_chroot'): (I / d).mkdir(parents=True, exist_ok=True)
+    (r / 'var/log/installer').mkdir(parents=True)
+    cfg = '[config]\nenable-swapfile=false\n[custompartition]\ncustom-partitions="efi;boot;root;backup;data;swap;"\n'
+    (I / 'ky-installer.cfg').write_text(cfg); (r / 'var/log/installer/ky-installer.cfg').write_text(cfg)
+    for f in ('data/systemdatasize.sh', 'scripts/autopart.sh', 'scripts/autopart-efi.sh'):
+        (I / f).write_text('### swap\nswap=$(( ram * 12 / 1024 / 10 ))\n')
+    (I / 'scripts/prepare/18setup-swapfile').write_text('#!/bin/bash\n\nset -e\n\nswapfile=8192\n')
+    (I / 'scripts/in_chroot/genfstab').write_text("    [[ $device = *'\\040(deleted)' ]] && continue\n")
     (r / 'usr/share/kylin-os-installer/scripts/prepare/16copy-basic-filesystem').write_text(
         "case ${LANGUAGES} in\n'en_US')\necho Done\n;;\n*)\necho 完成\n;;\nesac\nmsg \"文件系统拷贝完成\"\n")
     # openKylin's OSTree repository and the kernel its installer deploys.

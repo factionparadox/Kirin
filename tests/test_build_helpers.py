@@ -262,6 +262,8 @@ class TestIsoBootConfig(TempRoot):
         self.assertIn('background_image /boot/grub/kirin-background.png', new)
         self.assertIn('initrd\t\t/casper/initrd.lz', new)       # boot paths untouched
         self.assertIn('only-ubiquity', new)
+        self.assertEqual(new.count('boot=casper kyswapfile'), new.count('boot=casper'))
+        self.assertEqual(bootcfg.rewrite(new)[0], new)               # idempotent
         self.assertEqual(notes, [])
 
     def test_writes_only_changed_configs_and_flags_chinese(self):

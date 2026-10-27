@@ -7,6 +7,9 @@ builder to map into the new ISO. The extracted tree itself is not modified.
 
 * `locale=zh_CN…` becomes `locale=en_GB.UTF-8`, with a British keyboard, so the
   live session and the installer start in British English.
+* `kyswapfile` is added to every live kernel line: openKylin's installer reads it
+  first and then makes no swap partition (Kirin uses zram; the installer patch in
+  scripts/kirin-installer.py also stops the swap file).
 * "openKylin" in menu titles and labels becomes "Kirin Linux".
 * GRUB gets the Kirin background image, if --grub-background is given.
 """
@@ -41,6 +44,8 @@ def rewrite(text: str, background: str | None = None) -> tuple[str, list[str]]:
             line = LOCALE.sub('locale=en_GB.UTF-8', line)
             if KEYBOARD not in line:
                 line = line.replace('locale=en_GB.UTF-8', f'locale=en_GB.UTF-8 {KEYBOARD}', 1)
+        if 'boot=casper' in line and not re.search(r'\bkyswapfile\b', line):
+            line = line.replace('boot=casper', 'boot=casper kyswapfile', 1)
         out.append(line)
     result = ''.join(out)
     if background and 'terminal_output gfxterm' in result and 'background_image' not in result:

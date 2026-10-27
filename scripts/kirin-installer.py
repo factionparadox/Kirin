@@ -2,9 +2,12 @@
 """Apply or audit Kirin's changes to openKylin's graphical installer in an OFFLINE
 image root. Never runs on /.
 
-* No swap: Kirin swaps to compressed RAM (zram), and hibernation is not supported,
-  so the installer must not make a swap partition or swap file. Every installer
-  settings file that has them gets EnableSwap=false and enable-swapfile=false.
+* No swap partition or swap file: Kirin swaps to compressed RAM (zram), and
+  hibernation is not supported. openKylin sizes a swap partition at 1.2 x RAM (up
+  to 64 GB). Its own "swap file" mode is the one that makes no swap partition, so
+  Kirin turns that on (enable-swapfile=true), makes the size 0 in the scripts that
+  compute it (so the root partition is not padded by it either), stops the swap
+  file being created, and keeps the live session's zram out of the new fstab.
 * English progress messages: the installer's scripts pick a message with
   `case ${LANGUAGES}`, and anything not listed (Kirin's en_GB) falls through to
   Chinese. The fallback branch now says what the en_US branch says. Hard-coded
@@ -21,8 +24,20 @@ import sys
 INSTALLER = 'usr/share/kylin-os-installer'
 SCRIPTS = f'{INSTALLER}/scripts'
 CJK = re.compile(r'[一-鿿]')
-SWAP_KEYS = {'enableswap': 'EnableSwap', 'enable-swapfile': 'enable-swapfile'}
-SETTINGS_SUFFIXES = ('.ini', '.cfg', '.conf')
+# Swap edits: (file, pattern, replacement, marker present once applied).
+SWAP_RAM = (r'^(\s*)swap=\$\(\( ram \* 12 / 1024 / 10 \)\)$',
+            r'\1swap=0   # Kirin: no swap partition or file; zram swaps to compressed RAM',
+            'swap=0   # Kirin:')
+CFGS = (f'{INSTALLER}/ky-installer.cfg', 'var/log/installer/ky-installer.cfg')
+SWAP_EDITS = [
+    *[(c, r'^enable-swapfile=\S*$', 'enable-swapfile=true', '\nenable-swapfile=true\n') for c in CFGS],
+    *[(c, r'^(custom-partitions="[^"\n]*?)swap;', r'\1', None) for c in CFGS],
+    *[(f'{INSTALLER}/{f}', *SWAP_RAM) for f in ('data/systemdatasize.sh', 'scripts/autopart.sh', 'scripts/autopart-efi.sh')],
+    (f'{SCRIPTS}/prepare/18setup-swapfile', r'\A(#!/bin/bash\n\nset -e\n)(?!return 0)',
+     r'\1return 0   # Kirin: no swap file\n', '\nreturn 0   # Kirin: no swap file\n'),
+    (f'{SCRIPTS}/in_chroot/genfstab', r"^(\s*)(\[\[ \$device = \*'\\040\(deleted\)' \]\] && continue)$(?!\n\s*\[\[ \$device = /dev/zram)",
+     r'\1\2\n\1[[ $device = /dev/zram* ]] && continue   # Kirin: zram-generator sets up zram', '/dev/zram* ]] && continue   # Kirin'),
+]
 
 # Hard-coded log messages, exact.
 MESSAGES = {
@@ -126,51 +141,14 @@ def fix_messages(text: str) -> tuple[str, list[str]]:
     return '\n'.join(lines), left
 
 
-def installer_files(root: Path) -> list[Path]:
-    """Files owned by the installer packages, plus anything under its share dir."""
-    files: set[Path] = set()
-    info = root / 'var/lib/dpkg/info'
-    for lst in info.glob('*os-installer*.list') if info.is_dir() else []:
-        for rel in lst.read_text(errors='replace').splitlines():
-            p = root / rel.lstrip('/')
-            if rel and p.is_file() and not p.is_symlink():
-                files.add(p)
-    share = root / INSTALLER
-    if share.is_dir():
-        files.update(p for p in share.rglob('*') if p.is_file() and not p.is_symlink())
-    etc = root / 'etc'
-    if etc.is_dir():
-        for p in etc.glob('*installer*'):
-            if p.is_file():
-                files.add(p)
-            elif p.is_dir():
-                files.update(q for q in p.rglob('*') if q.is_file() and not q.is_symlink())
-    return sorted(files)
-
-
-def set_swap_off(text: str) -> tuple[str, bool]:
-    found = False
-    def repl(m):
-        nonlocal found
-        found = True
-        return f'{m.group(1)}{m.group(2)}false'
-    # Keep openKylin's spelling, spacing and any trailing comment out of the value.
-    pattern = re.compile(r'^(\s*)((?i:EnableSwap|enable-swapfile)\s*=\s*)[^;#\n]*?(?=\s*(?:[;#；].*)?$)', re.M)
-    return pattern.sub(repl, text), found
-
-
-def swap_settings(root: Path) -> list[tuple[Path, str]]:
-    out = []
-    for p in installer_files(root):
-        if p.suffix not in SETTINGS_SUFFIXES and 'setting' not in p.name.lower():
-            continue
-        try:
-            text = p.read_text()
-        except (UnicodeDecodeError, OSError):
-            continue
-        if re.search(r'^\s*(?i:EnableSwap|enable-swapfile)\s*=', text, re.M):
-            out.append((p, text))
-    return out
+def swap_edit(text: str, pattern: str, repl: str, marker: str | None) -> tuple[str, str]:
+    """Returns (new text, state): state is 'applied', 'done' or 'missing'."""
+    new = re.sub(pattern, repl, text, count=1, flags=re.M)
+    if new != text:
+        return new, 'applied'
+    if marker is None or marker in text:
+        return text, 'done'
+    return text, 'missing'
 
 
 def scripts(root: Path) -> list[Path]:
@@ -196,14 +174,15 @@ def apply(root: Path) -> list[str]:
     notes = []
     if not (root / INSTALLER).is_dir():
         return ["openKylin's graphical installer is not in this image; nothing to change"]
-    settings = swap_settings(root)
-    for p, text in settings:
-        new, _ = set_swap_off(text)
-        if new != text:
-            write(p, new)
-            notes.append(f'swap off: /{p.relative_to(root)}')
-    if not settings:
-        notes.append('WARNING: no installer setting for swap found (EnableSwap / enable-swapfile)')
+    for rel, pattern, repl, marker in SWAP_EDITS:
+        p = root / rel
+        if not p.is_file():
+            notes.append(f'WARNING: /{rel} missing; swap not turned off there'); continue
+        new, state = swap_edit(p.read_text(), pattern, repl, marker)
+        if state == 'applied':
+            write(p, new); notes.append(f'no swap: /{rel}')
+        elif state == 'missing':
+            notes.append(f'WARNING: /{rel} has changed upstream; swap not turned off there')
     changed, left = 0, []
     for p in scripts(root):
         text = read_script(p)
@@ -226,13 +205,13 @@ def audit(root: Path) -> list[str]:
     if not (root / INSTALLER).is_dir():
         return []
     problems = []
-    settings = swap_settings(root)
-    if not settings:
-        problems.append('no installer swap setting found to turn off (EnableSwap / enable-swapfile)')
-    for p, text in settings:
-        for m in re.finditer(r'^\s*((?i:EnableSwap|enable-swapfile))\s*=\s*([^;#；\n]*)', text, re.M):
-            if m.group(2).strip().lower() != 'false':
-                problems.append(f'/{p.relative_to(root)}: {m.group(1)}={m.group(2).strip()} (want false)')
+    for rel, pattern, repl, marker in SWAP_EDITS:
+        p = root / rel
+        if not p.is_file():
+            problems.append(f'/{rel} missing'); continue
+        state = swap_edit(p.read_text(), pattern, repl, marker)[1]
+        if state != 'done':
+            problems.append(f'/{rel}: swap still on' if state == 'applied' else f'/{rel}: changed upstream, swap edit does not fit')
     for p in scripts(root):
         text = read_script(p)
         if text is None:
