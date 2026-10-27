@@ -33,5 +33,14 @@ if a[0] == '-d':
     (r / 'usr/lib/os-release').write_text('NAME="openKylin"\nID=openkylin\nVERSION_ID="3.0"\n')
     os.symlink('../usr/lib/os-release', r / 'etc/os-release')
     os.symlink('../run/systemd/resolve/stub-resolv.conf', r / 'etc/resolv.conf')
+    # openKylin's OSTree repository and the kernel its installer deploys.
+    (r / 'boot').mkdir(); (r / 'usr/lib/modules/7.0.0-3-generic').mkdir(parents=True)
+    (r / 'boot/vmlinuz-7.0.0-3-generic').write_bytes(b'kernel'); (r / 'boot/initrd.img-7.0.0-3-generic').write_bytes(b'initrd')
+    branch = 'openkylin/desktop/v3.0/community/general/all/release/amd64'
+    (r / 'etc/ostree-release').write_text(f'[openkylin]\nversion=openkylin:{branch}\nupdate-type=full\n')
+    repo = r / 'sysroot/ostree/repo'
+    (repo / 'refs/remotes/openkylin' / branch).parent.mkdir(parents=True)
+    (repo / 'config').write_text('[core]\nmode=bare\n')
+    (repo / 'refs/remotes/openkylin' / branch).write_text('7abfcb4c' + '0' * 56 + '\n')
     sys.exit(0)
 sys.exit(f'unsquashfs stub: unhandled {a}')

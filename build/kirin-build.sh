@@ -177,7 +177,6 @@ mount_chroot() {
 
   mkdir -p "$ROOTFS/kirin-build"
   install -m 0755 "$HERE/chroot-steps.sh" "$ROOTFS/kirin-build/chroot-steps.sh"
-  install -m 0755 "$REPO/scripts/build/ostree-tree.sh" "$ROOTFS/kirin-build/ostree-tree.sh"
   install -m 0644 "$REPO/packaging/base-packages.txt" "$REPO/packaging/flatpak-apps.txt" \
     "$REPO/packaging/extra-packages.txt" "$REPO/packaging/prefer-ubuntu.txt" "$ROOTFS/kirin-build/"
   [ ! -f "$PAYLOADS/libfyaml-$FYAML_VERSION.tar.gz" ] ||
@@ -841,8 +840,6 @@ apply_kirin_layer() {
 
   in_chroot finish | tee "$AUDIT/finish.log"
   in_chroot manifest > "$WORK/filesystem.manifest"
-  info 'committing Kirin into the OSTree repository that the graphical installer deploys'
-  in_chroot ostree-commit | tee "$AUDIT/ostree-build.log" | sed 's/^/    /'
   restore_chroot
 
   # Packages installed above can bring back translated menu keys and Kylin names.
@@ -850,6 +847,27 @@ apply_kirin_layer() {
     info 'language tool reported problems; the audit stage will show them'
   python3 "$REPO/scripts/kirin-rebrand.py" --root "$ROOTFS" --apply >/dev/null
   prepare_live_initrd
+  commit_ostree
+}
+
+# openKylin's graphical installer deploys the OSTree commit in the image's repository,
+# not the live system. Commit the finished system (after the chroot is torn down, so no
+# build resolv.conf or policy-rc.d gets in) on openKylin's branch.
+commit_ostree() {
+  : > "$AUDIT/ostree-build.log"
+  if [ ! -f "$ROOTFS/sysroot/ostree/repo/config" ] || [ ! -f "$ROOTFS/etc/ostree-release" ]; then
+    echo 'OSTREE: no repository in this image; skipped' | tee "$AUDIT/ostree-build.log" | sed 's/^/    /'; return 0
+  fi
+  info 'committing Kirin into the OSTree repository that the graphical installer deploys'
+  mkdir -p "$ROOTFS/kirin-build"
+  install -m 0755 "$HERE/chroot-steps.sh" "$ROOTFS/kirin-build/chroot-steps.sh"
+  touch "$ROOTFS/kirin-build/IN_CHROOT"
+  sh "$REPO/scripts/build/ostree-tree.sh" "$ROOTFS" "$ROOTFS/kirin-build/ostree-tree" | sed 's/^/    /'
+  mount --bind /dev "$ROOTFS/dev"; MOUNTS+=("$ROOTFS/dev")
+  mount -t proc proc "$ROOTFS/proc"; MOUNTS+=("$ROOTFS/proc")
+  in_chroot ostree-commit | tee "$AUDIT/ostree-build.log" | sed 's/^/    /'
+  umount_chroot
+  rm -rf "$ROOTFS/kirin-build"
 }
 
 # --refresh: re-apply the Kirin layer to an already customised image (no package installs).

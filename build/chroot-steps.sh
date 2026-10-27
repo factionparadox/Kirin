@@ -418,8 +418,8 @@ case "$step" in
     reffile="$repo/refs/remotes/$remote/$branch"
     [ -f "$reffile" ] || { echo "OSTREE: no ref $spec in the repository; skipped"; exit 0; }
     old=$(cat "$reffile")
-    tree=/kirin-build/ostree-tree
-    sh /kirin-build/ostree-tree.sh / "$tree"
+    tree=/kirin-build/ostree-tree   # laid out by the builder (scripts/build/ostree-tree.sh)
+    [ -d "$tree/usr/etc" ] || { echo "OSTREE: $tree is missing" >&2; exit 1; }
     # Keep openKylin's update metadata (version, update-type...) from /etc/ostree-release.
     set --
     while IFS= read -r line; do

@@ -6,7 +6,8 @@ root, script, step, *args = sys.argv[1:]
 root = Path(root)
 assert '/usr/sbin' in os.environ['PATH'].split(':'), 'chroot run without sbin in PATH'
 assert script == '/kirin-build/chroot-steps.sh' and (root / 'kirin-build/IN_CHROOT').is_file(), 'chroot not prepared'
-assert (root / 'usr/sbin/policy-rc.d').is_file(), 'services not blocked'
+# ostree-commit runs after teardown on purpose: it must not capture policy-rc.d.
+assert step == 'ostree-commit' or (root / 'usr/sbin/policy-rc.d').is_file(), 'services not blocked'
 status = root / 'var/lib/dpkg/status'
 pkgs = re.findall(r'^Package: (\S+)', status.read_text(), re.M)
 extra = (Path(os.environ['MOCK_STATE']) / 'extra-removal').exists()
@@ -65,7 +66,18 @@ elif step == 'proton':
 elif step == 'manifest':
     print('\n'.join(f'{p}\t1' for p in pkgs))
 elif step == 'ostree-commit':
-    assert (root / 'kirin-build/ostree-tree.sh').is_file(), 'ostree-tree.sh not staged'
-    print('OSTREE: no repository in this image; skipped')
+    import hashlib
+    tree, repo = root / 'kirin-build/ostree-tree', root / 'sysroot/ostree/repo'
+    assert (tree / 'usr/etc/hostname').is_file() and not (tree / 'etc').exists(), 'tree not in OSTree layout'
+    assert not (tree / 'usr/sbin/policy-rc.d').exists(), 'build policy-rc.d committed'
+    assert os.readlink(tree / 'usr/etc/resolv.conf') == '../run/systemd/resolve/stub-resolv.conf', 'build resolv.conf committed'
+    assert os.path.lexists(tree / 'usr/etc/os-release'), 'os-release missing from tree'
+    ref = next((repo / 'refs/remotes').rglob('amd64'))
+    old = ref.read_text().strip()
+    new = hashlib.sha256((tree / 'usr/etc/hostname').read_bytes()).hexdigest()
+    (repo / 'objects' / new[:2]).mkdir(parents=True, exist_ok=True)
+    (repo / 'objects' / new[:2] / f'{new[2:]}.commit').write_bytes(b'commit')
+    ref.write_text(new + '\n')
+    print(f'OSTREE: openkylin:{ref.relative_to(repo / "refs/remotes/openkylin")} -> {new} (was {old})')
 else:
     sys.exit(f'chroot stub: unknown step {step}')
