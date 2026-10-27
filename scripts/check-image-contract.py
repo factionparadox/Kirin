@@ -9,28 +9,28 @@ import sys
 
 MODEL_TAG = 'qwen2.5-coder:7b-instruct'
 
-def verify_existing_models(inventory_file: Path, candidate_root: Path) -> list[str]:
+def verify_models_removed(inventory_file: Path, owners_file: Path | None, kept_file: Path | None,
+                          candidate_root: Path) -> tuple[list[str], list[str]]:
+    """openKylin's AI models must be gone, except those inside an application Kirin keeps."""
     inventory = json.loads(inventory_file.read_text(encoding='utf-8'))
-    if not isinstance(inventory, dict) or not inventory:
-        raise ValueError('An explicit non-empty upstream AI inventory is required')
-    problems = []
-    for relative, expected in inventory.items():
+    if not isinstance(inventory, dict):
+        raise ValueError('the upstream AI inventory must be a JSON object')
+    owners = json.loads(owners_file.read_text(encoding='utf-8')) if owners_file and owners_file.is_file() else {}
+    kept = set(kept_file.read_text(encoding='utf-8').split()) if kept_file and kept_file.is_file() else set()
+    problems, notes = [], []
+    for relative in inventory:
         rel = Path(relative)
         if not isinstance(relative, str) or not relative or rel.is_absolute() or '..' in rel.parts:
             problems.append(f'invalid upstream path: {relative!r}')
             continue
-        if not isinstance(expected, str) or len(expected) != 64 or any(c not in '0123456789abcdef' for c in expected):
-            problems.append(f'invalid SHA-256 for: {relative}')
+        if not (candidate_root / rel).exists():
             continue
-        candidate = candidate_root / rel
-        if not candidate.is_file() or candidate.is_symlink():
-            problems.append(f'upstream model file missing or symlinked: {relative}')
-            continue
-        with candidate.open('rb') as handle:
-            digest = hashlib.file_digest(handle, 'sha256').hexdigest()
-        if digest != expected:
-            problems.append(f'upstream model changed: {relative}')
-    return problems
+        owner = (owners.get(relative) or {}).get('package', '')
+        if owner and owner in kept:
+            notes.append(f'kept inside {owner}: {relative}')
+        else:
+            problems.append(f'openKylin AI model still present: {relative}' + (f' ({owner})' if owner else ''))
+    return problems, notes
 
 def verify_qwen(model_index: Path, blobs_root: Path) -> list[str]:
     entry = json.loads(model_index.read_text(encoding='utf-8'))
@@ -63,20 +63,26 @@ def verify_qwen(model_index: Path, blobs_root: Path) -> list[str]:
 def main(argv=None):
     p = argparse.ArgumentParser(description='Validate staged Kirin image model payloads')
     p.add_argument('--upstream-inventory', type=Path, required=True)
+    p.add_argument('--owners', type=Path, help='path -> package report from inventory-models.py')
+    p.add_argument('--kept', type=Path, help='packages kept because a model is part of an application')
     p.add_argument('--candidate-root', type=Path, required=True)
-    p.add_argument('--qwen-index', type=Path, required=True)
-    p.add_argument('--qwen-blobs', type=Path, required=True)
+    p.add_argument('--qwen-index', type=Path, help='coding model blob index (only when models are bundled)')
+    p.add_argument('--qwen-blobs', type=Path)
     args = p.parse_args(argv)
     try:
-        problems = verify_existing_models(args.upstream_inventory, args.candidate_root)
-        problems += verify_qwen(args.qwen_index, args.qwen_blobs)
+        problems, notes = verify_models_removed(args.upstream_inventory, args.owners, args.kept, args.candidate_root)
+        if args.qwen_index:
+            problems += verify_qwen(args.qwen_index, args.qwen_blobs)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f'IMAGE REJECTED: {exc}', file=sys.stderr)
         return 1
+    for item in notes:
+        print(item)
     for item in problems:
         print(f'IMAGE REJECTED: {item}', file=sys.stderr)
     if problems: return 1
-    print('AI payload audit passed: upstream inventory unchanged; coding blobs complete')
+    print("AI payload audit passed: openKylin's models removed"
+          + ('; coding model complete' if args.qwen_index else '; AI models are downloaded after install (kirin-content)'))
     return 0
 
 if __name__ == '__main__':

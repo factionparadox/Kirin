@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Kirin Content
+Name[ru]=Материалы Kirin
+Comment=Download the AI models, Russian courses, dictionaries, reading and audiobooks
+Comment[ru]=Загрузка моделей ИИ, курсов русского, словарей, книг и аудиокниг
+Exec=sudo kirin-content
+Icon=folder-download
+Terminal=true
+Categories=Education;System;

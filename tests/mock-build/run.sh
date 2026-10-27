@@ -26,7 +26,7 @@ EOF
 sha=$(sha256sum "$T/upstream.iso" | cut -d' ' -f1)
 ZIM=wiktionary_en_all_nopic_2026-09.zim
 run() { "$REPO/build/kirin-build.sh" --iso "$T/upstream.iso" --iso-sha256 "$sha" --work "$T/work" --out "$T/out" \
-          --kiwix-name "$ZIM" "$@"; }
+          --kiwix-name "$ZIM" --content bundled "$@"; }
 
 # Pre-seed payloads so no network is needed: fake Ollama and a sparse >4 GB model.
 P="$T/work/payloads"; ver=v0.40.11
@@ -93,24 +93,22 @@ echo '--- 1. wrong checksum is refused'
 if "$REPO/build/kirin-build.sh" --iso "$T/upstream.iso" --iso-sha256 "$(printf '0%.0s' {1..64})" \
      --work "$T/work" --out "$T/out" >/dev/null 2>&1; then fail 'bad checksum accepted'; fi
 
-echo '--- 2. first run, without a checksum, recovers the cut-short squashfs and stops for review'
-set +e; "$REPO/build/kirin-build.sh" --iso "$T/upstream.iso" --work "$T/work" --out "$T/out" > "$T/log1" 2>&1; rc=$?; set -e
-[ "$rc" -eq 10 ] || { cat "$T/log1"; fail "expected review stop (10), got $rc"; }
+echo '--- 2. first run, without a checksum, recovers the cut-short squashfs; an unrequested removal blocks the purge'
+touch "$MOCK_STATE/extra-removal"
+set +e; "$REPO/build/kirin-build.sh" --iso "$T/upstream.iso" --work "$T/work" --out "$T/out" --kiwix-name "$ZIM" \
+  --content bundled > "$T/log1" 2>&1; rc=$?; set -e
+[ "$rc" -ne 0 ] && grep -q 'unrequested removal: openkylin-desktop-meta' "$T/log1" || { cat "$T/log1"; fail 'extra removal not refused'; }
+grep -q 'Status: install ok installed' <(grep -A1 'Package: openkylin-token-center' "$T/work/rootfs/var/lib/dpkg/status") ||
+  fail 'package purged despite refusal'
+grep -q '1 openKylin AI model files' "$T/log1" || { cat "$T/log1"; fail 'models not summarised'; }
 grep -q 'came out incomplete' "$T/log1" && grep -q 'recovered 307200 bytes' "$T/log1" || { cat "$T/log1"; fail 'short squashfs not recovered'; }
 cmp -s "$T/work/iso/casper/filesystem.squashfs" "$MOCK_STATE/squashfs.full" || fail 'recovered squashfs differs'
 grep -q 'opt/kylin-ai/asr.onnx' "$T/work/upstream/upstream-models.json" || fail 'model not inventoried'
 grep -q 'kingsoft' "$T/work/upstream/upstream-models.json" && fail 'excluded WPS model was inventoried'
-[ ! -e "$T/work/.done-customise" ] || fail 'image modified before review'
-
-echo '--- 3. unrequested removal blocks the purge'
-touch "$MOCK_STATE/extra-removal"
-set +e; run --from inventory --accept-inventory > "$T/log2" 2>&1; rc=$?; set -e
-[ "$rc" -ne 0 ] && grep -q 'unrequested removal: openkylin-desktop-meta' "$T/log2" || { cat "$T/log2"; fail 'extra removal not refused'; }
-grep -q 'Status: install ok installed' <(grep -A1 'Package: openkylin-token-center' "$T/work/rootfs/var/lib/dpkg/status") ||
-  fail 'package purged despite refusal'
+[ ! -e "$T/work/.done-customise" ] || fail 'customise marked done after a refused purge'
 
 echo '--- 4. reviewed allowance lets the build finish'
-run --from customise --accept-inventory --allow-removal openkylin-desktop-meta > "$T/log3" 2>&1 || { cat "$T/log3"; fail 'build failed'; }
+run --from customise --allow-removal openkylin-desktop-meta > "$T/log3" 2>&1 || { cat "$T/log3"; fail 'build failed'; }
 iso=$(ls "$T"/out/kirin-*-amd64.iso)
 grep -q 'map .*filesystem.squashfs /casper/filesystem.squashfs' "$iso" || fail 'squashfs not mapped into ISO'
 grep -q 'boot_image any replay' "$iso" || fail 'boot records not replayed'
@@ -172,13 +170,16 @@ grep -q 'UBUNTU alsa-ucm-conf' "$T/work/audit/prefer-ubuntu.log" || fail 'prefer
 grep -q 'from Ubuntu: fprintd' "$T/work/audit/pin-extras.log" || fail 'extras not pinned for updates'
 grep -q 'ZFS: OpenZFS 2.4.1 ready' "$T/work/audit/zfs-build.log" || fail 'ZFS step not run'
 cmp -s "$SITE/zbm/zbm-release.EFI" "$R/usr/share/kirin/zfsbootmenu/VMLINUZ.EFI" || fail 'ZFSBootMenu not installed'
+[ ! -e "$R/opt/kylin-ai/asr.onnx" ] && grep -q 'removing openKylin.s AI models: kylin-ai' "$T/log3" || fail 'openKylin AI model not removed'
+grep -q "AI payload audit passed: openKylin's models removed; coding model complete" "$T/work/audit/ai-payload.log" || fail 'ai-payload audit wrong'
+[ -x "$R/usr/bin/kirin-content" ] && [ -f "$R/usr/lib/kirin/content/fetch-kiwix.py" ] || fail 'kirin-content not installed'
 [ -x "$R/usr/sbin/kirin-zfs-install" ] && [ -x "$R/usr/bin/kirin-be" ] && [ -x "$R/usr/lib/kirin/zfs-apt-snapshot" ] || fail 'ZFS tools not installed'
 grep -q 'PASS zfs' "$T/work/audit/summary" || fail 'zfs audit did not pass'
 grep -q 'blacklist cros-usbpd-charger' "$R/etc/modprobe.d/kirin-framework.conf" || fail 'Framework module options missing'
 grep -q 'ani-cli' "$T/work/audit/kirin-debs.log" || fail 'Kirin packages step not run'
 grep -q 'Proton' "$T/work/audit/proton.log" || fail 'Proton step not run'
-cat "$T/log2" "$T/log3" | grep -q 'SKIPPED vpn' || fail 'unreachable Proton source not skipped gracefully'
-cat "$T/log2" "$T/log3" | grep -q 'Kirin APT repository not set up yet' || fail 'missing Kirin key not reported'
+cat "$T/log1" "$T/log3" | grep -q 'SKIPPED vpn' || fail 'unreachable Proton source not skipped gracefully'
+cat "$T/log1" "$T/log3" | grep -q 'Kirin APT repository not set up yet' || fail 'missing Kirin key not reported'
 grep -q 'keeping openKylin.s live initrd' "$T/log3" || fail 'live initrd decision not reported'
 
 grep -q 'no kernel config in the image; using xz' "$T/log3" || fail 'compression fallback not reported'
@@ -187,7 +188,7 @@ grep -q -- '-comp xz' "$T/work/filesystem.squashfs" || fail 'fallback compressio
 echo '--- 4b. --refresh re-applies Kirin files and packs with zstd when the kernel supports it'
 mkdir -p "$R/boot"; printf 'CONFIG_SQUASHFS=y\nCONFIG_SQUASHFS_ZSTD=y\n' > "$R/boot/config-7.0.0-3-generic"
 rm -f "$R/etc/kirin-release" "$R/usr/bin/kirin-learn"
-run --refresh --accept-inventory > "$T/log4b" 2>&1 || { cat "$T/log4b"; fail 'refresh failed'; }
+run --refresh > "$T/log4b" 2>&1 || { cat "$T/log4b"; fail 'refresh failed'; }
 grep -q 'Refreshing Kirin files' "$T/log4b" && ! grep -q 'installing base packages' "$T/log4b" || fail 'refresh redid customise'
 [ -f "$R/etc/kirin-release" ] && [ -x "$R/usr/bin/kirin-learn" ] || fail 'refresh did not re-apply Kirin files'
 grep -q -- '-comp zstd -Xcompression-level 12' "$T/work/filesystem.squashfs" || fail 'zstd not used'
@@ -202,9 +203,19 @@ ls "$T"/out/kirin-*-amd64.iso >/dev/null || fail 'test build ISO missing'
 grep -q 'audits that did not pass: language' "$T/log5" || fail 'failed audit not reported'
 python3 -c "import glob, json, sys; r = json.load(open(glob.glob(sys.argv[1] + '/*.build.json')[0])); assert r['test_build'] and r['audits']['language'] == 'FAIL', r" "$T/out" || fail 'test build not recorded'
 
-echo '--- 6. tampering with an upstream model is never waived'
-echo tamper >> "$R/opt/kylin-ai/asr.onnx"
+echo '--- 6. an openKylin AI model left in the image is never waived'
+mkdir -p "$R/opt/kylin-ai"; echo leftover > "$R/opt/kylin-ai/asr.onnx"
 set +e; run --only audit --test-build > "$T/log4" 2>&1; rc=$?; set -e
-[ "$rc" -ne 0 ] && grep -q 'never waived' "$T/log4" || { cat "$T/log4"; fail 'model tamper not caught'; }
+[ "$rc" -ne 0 ] && grep -q 'never waived' "$T/log4" || { cat "$T/log4"; fail 'leftover model not caught'; }
+rm -f "$R/opt/kylin-ai/asr.onnx"
+
+echo '--- 7. on-demand content: no AI models or big Russian material in the image'
+run --from customise --content on-demand --allow-removal openkylin-desktop-meta --test-build > "$T/log7" 2>&1 || { cat "$T/log7"; fail 'on-demand build failed'; }
+[ -z "$(ls -A "$R/usr/share/ollama/.ollama/models" 2>/dev/null)" ] || fail 'models bundled in on-demand build'
+for d in library dictionary audiobooks; do [ ! -e "$R/opt/kirin/russian/$d" ] || fail "$d bundled in on-demand build"; done
+[ "$(ls "$R"/opt/kirin/russian/voices/*.onnx | wc -l)" -eq 4 ] || fail 'voices missing in on-demand build'
+grep -q 'AI models are downloaded after install' "$T/work/audit/ai-payload.log" || fail 'on-demand ai-payload audit wrong'
+grep -q 'PASS russian' "$T/work/audit/summary" || { cat "$T/work/audit/russian.log"; fail 'on-demand russian audit failed'; }
+python3 -c "import glob, json, sys; r = json.load(open(sorted(glob.glob(sys.argv[1] + '/*.build.json'))[-1])); assert r['content'] == 'on-demand', r" "$T/out" || fail 'content mode not recorded'
 
 echo 'MOCK BUILD PASSED'

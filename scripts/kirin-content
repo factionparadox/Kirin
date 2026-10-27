@@ -1,0 +1,229 @@
+#!/usr/bin/env python3
+"""Kirin Content: download Kirin's large optional material after installing.
+
+The ISO stays small; the AI models and the big Russian material are fetched here,
+with the same checks the image builder uses: Ollama verifies every model blob by
+digest, Kiwix ZIMs against Kiwix's published SHA-256, audiobooks against the
+Internet Archive's MD5 and SHA-1, and course files against hashes pinned on their
+first download.
+
+    kirin-content                   choose interactively
+    kirin-content list              what is available and what is installed
+    sudo kirin-content install PACK [PACK...]   (or: install all)
+    sudo kirin-content remove PACK
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+
+ROOT = Path(os.environ.get('KIRIN_CONTENT_ROOT', '/'))
+LIB = ROOT / 'usr/lib/kirin/content'
+STATE = ROOT / 'var/lib/kirin/content'
+RU = ROOT / 'opt/kirin/russian'
+CONFIG = ROOT / 'usr/share/kirin/russian.json'
+RU_PATH = '/opt/kirin/russian'                     # as the installed system sees it
+KIWIX = os.environ.get('KIRIN_CONTENT_KIWIX', 'https://download.kiwix.org/zim')
+ARCHIVE = os.environ.get('KIRIN_CONTENT_ARCHIVE', 'https://archive.org/')
+MEZHDUNAMI = os.environ.get('KIRIN_CONTENT_MEZHDUNAMI', 'https://mezhdunami.org/')
+OLLAMA = os.environ.get('KIRIN_CONTENT_OLLAMA', 'ollama')
+YTDLP = os.environ.get('KIRIN_CONTENT_YTDLP', 'yt-dlp')
+
+ZIMS = {   # key: (Kiwix directory, file prefix)
+    'wiktionary': ('wiktionary', 'wiktionary_en_all_nopic_'),
+    'wiktionary-ru': ('wiktionary', 'wiktionary_ru_all_nopic_'),
+    'wikisource': ('wikisource', 'wikisource_ru_all_nopic_'),
+    'wikipedia': ('wikipedia', 'wikipedia_ru_all_mini_'),
+}
+PACKS = {
+    'ai-coder': ('Coding assistant: Qwen2.5-Coder 7B (kirin-learn ask-code, Alpaca)', 4.7),
+    'ai-tutor': ('Russian tutor: Qwen3 30B (kirin-learn russian, Alpaca)', 18.6),
+    'ru-course': ('Russian courses: FSI, DLI and Peace Corps books and audio, Между нами workbooks', 0.7),
+    'ru-dictionaries': ('Dictionaries: English and Russian Wiktionary (Kiwix)', 9.0),
+    'ru-reading': ('Reading: Russian Wikisource (classics) and Wikipedia (introductions)', 6.0),
+    'ru-audiobooks': ('Audiobooks: 29 LibriVox Russian recordings, A2 to B2', 5.0),
+}
+MODELS = {'ai-coder': 'qwen2.5-coder:7b-instruct', 'ai-tutor': 'qwen3:30b-a3b-instruct-2507-q4_K_M'}
+
+
+def say(text: str) -> None:
+    print(text, flush=True)
+
+
+def run(cmd: list[str]) -> bool:
+    say('    $ ' + ' '.join(cmd[:3]) + (' …' if len(cmd) > 3 else ''))
+    return subprocess.run(cmd).returncode == 0
+
+
+def helper(name: str, *args: str) -> list[str]:
+    return [sys.executable, '-I', str(LIB / name), *args]
+
+
+def ollama_has(tag: str) -> bool:
+    try:
+        out = subprocess.run([OLLAMA, 'list'], capture_output=True, text=True, timeout=30).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return any(line.split()[:1] == [tag] for line in out.splitlines()[1:])
+
+
+def zim_file(key: str) -> Path | None:
+    found = sorted((RU / 'dictionary').glob(ZIMS[key][1] + '*.zim'))
+    return found[-1] if found else None
+
+
+def installed(pack: str) -> bool:
+    if pack in MODELS:
+        return ollama_has(MODELS[pack])
+    if pack == 'ru-course':
+        return (RU / 'library/SHA256SUMS').is_file()
+    if pack == 'ru-dictionaries':
+        return bool(zim_file('wiktionary') and zim_file('wiktionary-ru'))
+    if pack == 'ru-reading':
+        return bool(zim_file('wikisource') and zim_file('wikipedia'))
+    if pack == 'ru-audiobooks':
+        return (RU / 'audiobooks/catalog.json').is_file()
+    raise KeyError(pack)
+
+
+def update_config() -> None:
+    """Point russian.json (read by kirin-learn) at whatever is now on disk."""
+    try:
+        config = json.loads(CONFIG.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        config = {}
+    kiwix = {key: f'{RU_PATH}/dictionary/{path.name}' for key in ZIMS if (path := zim_file(key))}
+    config.update({'root': RU_PATH, 'library': f'{RU_PATH}/library', 'audiobooks': f'{RU_PATH}/audiobooks',
+                   'mezhdunami': f'{RU_PATH}/mezhdunami', 'kiwix': kiwix,
+                   'dictionary': kiwix.get('wiktionary', '')})
+    CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG.write_text(json.dumps(config, indent=2) + '\n', encoding='utf-8')
+
+
+def fetch_zims(keys: list[str]) -> bool:
+    ok = True
+    for key in keys:
+        directory, prefix = ZIMS[key]
+        say(f'  {prefix}*.zim')
+        ok &= run(helper('fetch-kiwix.py', '--index', f'{KIWIX}/{directory}/', '--prefix', prefix,
+                         '--dest', str(RU / 'dictionary')))
+    return ok
+
+
+def install(pack: str) -> bool:
+    say(f'\n==> {PACKS[pack][0]} (about {PACKS[pack][1]:g} GB)')
+    STATE.mkdir(parents=True, exist_ok=True)
+    if pack in MODELS:
+        ok = run([OLLAMA, 'pull', MODELS[pack]])
+    elif pack == 'ru-course':
+        ok = run(helper('fetch-files.py', '--manifest', str(LIB / 'library.tsv'), '--dest', str(RU / 'library'),
+                        '--lock', str(STATE / 'library.lock.json')))
+        if not (RU / 'mezhdunami/index.html').is_file():   # normally already in the image
+            ytdlp = shutil.which(YTDLP) or ''
+            textbook = helper('fetch-mezhdunami.py', '--base', MEZHDUNAMI, '--dest', str(RU / 'mezhdunami'))
+            ok = run(textbook + (['--ytdlp', ytdlp] if ytdlp else [])) and ok
+    elif pack == 'ru-dictionaries':
+        ok = fetch_zims(['wiktionary', 'wiktionary-ru'])
+    elif pack == 'ru-reading':
+        ok = fetch_zims(['wikisource', 'wikipedia'])
+    elif pack == 'ru-audiobooks':
+        ok = run(helper('fetch-archive.py', '--manifest', str(LIB / 'audiobooks.tsv'), '--dest', str(RU / 'audiobooks'),
+                        '--base', ARCHIVE))
+    else:
+        raise KeyError(pack)
+    if pack.startswith('ru-'):
+        update_config()
+    say(f'    {"done" if ok else "FAILED (run it again to resume; finished files are kept)"}: {pack}')
+    return ok
+
+
+def remove(pack: str) -> bool:
+    if pack in MODELS:
+        return run([OLLAMA, 'rm', MODELS[pack]])
+    targets = {'ru-course': [RU / 'library'], 'ru-audiobooks': [RU / 'audiobooks'],
+               'ru-dictionaries': [zim_file('wiktionary'), zim_file('wiktionary-ru')],
+               'ru-reading': [zim_file('wikisource'), zim_file('wikipedia')]}[pack]
+    for target in filter(None, targets):
+        if target.is_dir():
+            shutil.rmtree(target)
+        elif target.exists():
+            target.unlink()
+    update_config()
+    say(f'removed {pack}')
+    return True
+
+
+def listing() -> None:
+    say('Kirin Content: optional downloads (sizes approximate)\n')
+    for n, (pack, (title, size)) in enumerate(PACKS.items(), 1):
+        mark = 'installed' if installed(pack) else f'{size:>4g} GB'
+        say(f'  {n}. {pack:16} {mark:>10}  {title}')
+    free = shutil.disk_usage(ROOT if ROOT.exists() else '/').free / 1e9
+    say(f'\nFree space: {free:.0f} GB')
+
+
+def need_root() -> None:
+    if os.geteuid() != 0 and not os.environ.get('KIRIN_CONTENT_ROOT'):
+        sys.exit('kirin-content: installing and removing need administrator rights: run it with sudo')
+
+
+def choose(ask=input) -> list[str]:
+    listing()
+    say('\nType the numbers to download (e.g. 1 3 4), "all", or press Enter to quit.')
+    reply = ask('> ').strip().lower()
+    if not reply:
+        return []
+    names = list(PACKS)
+    if reply == 'all':
+        return [p for p in names if not installed(p)]
+    picked = []
+    for word in reply.replace(',', ' ').split():
+        if word.isdigit() and 1 <= int(word) <= len(names):
+            picked.append(names[int(word) - 1])
+        elif word in PACKS:
+            picked.append(word)
+        else:
+            say(f'ignored: {word}')
+    return list(dict.fromkeys(picked))
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    sub = ap.add_subparsers(dest='cmd')
+    sub.add_parser('list')
+    inst = sub.add_parser('install'); inst.add_argument('packs', nargs='+')
+    rem = sub.add_parser('remove'); rem.add_argument('packs', nargs='+')
+    args = ap.parse_args(argv)
+    if args.cmd == 'list':
+        listing(); return 0
+    if args.cmd is None:
+        packs = choose()
+        if not packs:
+            return 0
+        args.cmd = 'install'
+    else:
+        packs = args.packs
+        if packs == ['all']:
+            packs = [p for p in PACKS if not installed(p)]
+        unknown = [p for p in packs if p not in PACKS]
+        if unknown:
+            say(f'unknown: {", ".join(unknown)} (choose from {", ".join(PACKS)})'); return 2
+    need_root()
+    if args.cmd == 'remove':
+        return 0 if all([remove(p) for p in packs]) else 1
+    needed = sum(PACKS[p][1] for p in packs if not installed(p))
+    free = shutil.disk_usage(ROOT).free / 1e9
+    if needed > free - 2:
+        say(f'Not enough space: these need about {needed:g} GB and {free:.0f} GB is free.'); return 1
+    results = [install(p) for p in packs]
+    say('\nAll done.' if all(results) else '\nSome downloads failed; run the same command again to resume.')
+    return 0 if all(results) else 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

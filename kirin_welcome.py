@@ -27,6 +27,8 @@ ITEMS = [
      'Изучить Linux', 'Офлайн-уроки: терминал, пакеты, службы и хранилище.'),
     ('kirin-russian-tutor.desktop', 'Russian tutor', 'Practise Russian with a local AI tutor that explains its corrections.',
      'Репетитор русского', 'Практика русского с локальным ИИ-репетитором.'),
+    ('kirin-content.desktop', 'Downloads', 'Get the AI models, Russian courses, dictionaries and audiobooks (about 45 GB in all; pick what you want).',
+     'Загрузки', 'Модели ИИ, курсы русского, словари и аудиокниги (всего около 45 ГБ; выберите нужное).'),
     ('kirin-russian-path.desktop', 'Russian A1 to B2', 'Your study plan: textbook, courses, words, audiobooks and reading.',
      'Русский: от A1 до B2', 'План занятий: учебник, курсы, слова, аудиокниги и чтение.'),
     ('kirin-russian-library.desktop', 'Russian courses', 'FSI, DLI, Peace Corps and Между нами textbooks and audio.',

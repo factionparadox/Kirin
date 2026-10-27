@@ -50,7 +50,7 @@ MIN_FREE_GB=${KIRIN_MIN_FREE_GB:-70}
 ISO='' ISO_SHA256='' WORK="$PWD/work" OUT="$PWD/out" SQUASHFS_REL=''
 MODEL_INVENTORY='' ACCEPT_INVENTORY=0 TEST_BUILD=0 FROM='' ONLY='' NO_RUSSIAN=0 KIWIX_NAME='' NO_EXTRA_REPOS=0
 RU_WIKIPEDIA=mini
-SQUASHFS_COMP=zstd REFRESH=0
+SQUASHFS_COMP=zstd REFRESH=0 CONTENT=on-demand
 OLLAMA_VERSION=$OLLAMA_VERSION_DEFAULT
 ALLOW_REMOVAL=()
 
@@ -79,6 +79,9 @@ Options:
   --kiwix-name FILE       Pin the Wiktionary ZIM (e.g. ${KIWIX_PREFIX}2026-09.zim) instead of the newest
   --ru-wikipedia KIND     Russian Wikipedia ZIM: mini (default: every article's introduction, a few GB),
                           nopic (full articles, ~10 GB), maxi (with pictures, ~30 GB) or none
+  --content KIND          on-demand (default): the AI models and big Russian material are downloaded
+                          after installing, with Kirin Content; bundled: put them all in the ISO
+                          (adds about 40 GB, works fully offline)
   --compression KIND      Root filesystem compression: zstd (default; faster live boot and install,
                           used only if the image's kernel supports it), gzip (as openKylin) or xz
   --refresh               Re-apply Kirin's own files, branding and defaults to the already
@@ -110,6 +113,9 @@ while [ $# -gt 0 ]; do
       case "$2" in zstd|gzip|xz) SQUASHFS_COMP=$2 ;; *) echo '--compression takes zstd, gzip or xz' >&2; exit 2 ;; esac
       shift 2 ;;
     --refresh) REFRESH=1; shift ;;
+    --content)
+      case "$2" in on-demand|bundled) CONTENT=$2 ;; *) echo '--content takes on-demand or bundled' >&2; exit 2 ;; esac
+      shift 2 ;;
     --ru-wikipedia)
       case "$2" in nopic|maxi|mini|none) RU_WIKIPEDIA=$2 ;; *) echo '--ru-wikipedia takes nopic, maxi, mini or none' >&2; exit 2 ;; esac
       shift 2 ;;
@@ -240,7 +246,7 @@ stage_preflight() {
   python3 -c 'import sys; sys.exit(sys.version_info < (3, 11))' || die 'python3 3.11 or newer is required'
   local free_gb need=$MIN_FREE_GB; free_gb=$(df --output=avail -BG "$WORK" | tail -1 | tr -dc 0-9)
   # The Russian kit adds a 19 GB model and a multi-GB dictionary, held in payloads, rootfs and squashfs.
-  [ "$NO_RUSSIAN" -eq 1 ] || [ -n "${KIRIN_MIN_FREE_GB:-}" ] || need=200
+  [ "$NO_RUSSIAN" -eq 1 ] || [ "$CONTENT" != bundled ] || [ -n "${KIRIN_MIN_FREE_GB:-}" ] || need=200
   [ "$free_gb" -ge "$need" ] || die "need ${need} GB free under $WORK, have ${free_gb} GB"
   info "host ok; ${free_gb} GB free in $WORK"
 }
@@ -304,7 +310,7 @@ stage_extract() {
 }
 
 stage_inventory() {
-  log 'Inventorying upstream AI model files'
+  log "Inventorying openKylin's AI model files (Kirin removes them)"
   local inv="$UPSTREAM/upstream-models.json" owners="$UPSTREAM/upstream-models-owners.json" rc=0
   if [ -n "$MODEL_INVENTORY" ]; then
     [ "$MODEL_INVENTORY" -ef "$inv" ] || cp "$MODEL_INVENTORY" "$inv"
@@ -322,22 +328,14 @@ inv, root = json.load(open(sys.argv[1])), Path(sys.argv[2])
 bad = [p for p, h in inv.items() if hashlib.file_digest((root / p).open('rb'), 'sha256').hexdigest() != h]
 if bad: sys.exit('inventory does not match upstream files: ' + ', '.join(bad))
 PY
-  if [ "$ACCEPT_INVENTORY" -ne 1 ]; then
-    cat <<EOF
-
-REVIEW REQUIRED before the image is modified.
-  The list above is saved in: $inv
-Check that every upstream AI model is listed and nothing unrelated is.
-If the list is right, continue with this one command:
-
-  sudo $0 --iso '$ISO' --from inventory --accept-inventory
-
-If you edited $(basename "$inv") by hand, add: --model-inventory '$inv.reviewed'
-(save your edited copy under that name first; a re-run rescans the original).
-EOF
-    exit 10
-  fi
-  info 'inventory accepted'
+  python3 - "$inv" "$owners" <<'PY'
+import json, sys
+inv, owners = json.load(open(sys.argv[1])), json.load(open(sys.argv[2]))
+size = sum(e.get('size', 0) for e in owners.values() if isinstance(e, dict))
+pkgs = sorted({e['package'] for e in owners.values() if isinstance(e, dict) and e.get('package')})
+print(f'    {len(inv)} openKylin AI model files, {size / 1e9:.2f} GB, in: {", ".join(pkgs)}')
+print('    Kirin removes them (packages that only carry models); see the ai-payload audit.')
+PY
 }
 
 fetch_ollama() {
@@ -409,12 +407,20 @@ fetch_russian() {
   [ "$NO_RUSSIAN" -eq 0 ] || { info 'Russian extras skipped (--no-russian)'; return; }
   local r="$PAYLOADS/russian"
   mkdir -p "$r"
-  pull_model "$TUTOR_TAG" "$PAYLOADS/tutor-blobs.json" 'about 19 GB'
   fetch_piper
   info 'fetching Piper Russian voices'
   python3 "$REPO/scripts/build/fetch-files.py" --manifest "$VOICES_TSV" \
       --dest "$r/voices" --lock "$r/voices.lock.json" --required |& sed 's/^/    /' ||
     die 'could not fetch the Piper Russian voices'
+  # The Между нами textbook always ships in the image: its licence allows a personal
+  # copy but not a public mirror, so Kirin Content cannot offer it later.
+  [ -f "$r/mezhdunami/index.html" ] || fetch_mezhdunami
+  touch "$r/core.done"
+  if [ "$CONTENT" != bundled ]; then
+    info 'the Russian tutor, course library, dictionaries and audiobooks are downloaded after installing (Kirin Content)'
+    return
+  fi
+  pull_model "$TUTOR_TAG" "$PAYLOADS/tutor-blobs.json" 'about 19 GB'
   info 'fetching the Russian course library (DLI, FSI, Peace Corps)'
   python3 "$REPO/scripts/build/fetch-files.py" --manifest "$LIBRARY_TSV" \
       --dest "$r/library" --lock "$r/library.lock.json" |& sed 's/^/    /' ||
@@ -429,7 +435,6 @@ fetch_russian() {
   info 'fetching Russian audiobooks (LibriVox, via the Internet Archive; several GB)'
   python3 "$REPO/scripts/build/fetch-archive.py" --manifest "$AUDIOBOOKS_TSV" --dest "$r/audiobooks" \
       --base "$ARCHIVE_BASE" |& sed 's/^/    /' || die 'the audiobook manifest could not be processed'
-  fetch_mezhdunami
 }
 
 # Russian Wiktionary, Wikisource and Wikipedia. Each is optional: a missing one is reported.
@@ -529,7 +534,7 @@ fetch_kirin_key() {
 stage_payloads() {
   log 'Fetching payloads: Ollama, the AI models, Russian learning material and compatibility sources'
   fetch_ollama
-  pull_qwen
+  if [ "$CONTENT" = bundled ]; then pull_qwen; else info 'AI models: downloaded after installing (Kirin Content)'; fi
   fetch_libfyaml
   fetch_debian_keys
   fetch_proton
@@ -598,25 +603,27 @@ install_russian() {
   local part
   # Hard links save space, but fail while the image is bind-mounted for the chroot;
   # then make a full copy (never into a half-made directory, which would nest it).
-  for part in voices library dictionary audiobooks mezhdunami; do
+  local -a parts=(voices mezhdunami)
+  [ "$CONTENT" != bundled ] || parts+=(library dictionary audiobooks)
+  for part in "${parts[@]}"; do
     [ -d "$r/$part" ] || continue
     rm -rf "$dest/$part"
     cp -al "$r/$part" "$dest/$part" 2>/dev/null || { rm -rf "$dest/$part"; cp -a "$r/$part" "$dest/$part"; }
   done
   find "$dest" -name '*.part' -delete
-  install -m 0644 "$PAYLOADS/tutor-blobs.json" "$ROOTFS/usr/share/kirin/tutor-blobs.json"
+  [ ! -f "$PAYLOADS/tutor-blobs.json" ] || install -m 0644 "$PAYLOADS/tutor-blobs.json" "$ROOTFS/usr/share/kirin/tutor-blobs.json"
   [ -f "$r/kiwix.list" ] || : > "$r/kiwix.list"
-  python3 - "$ROOTFS/usr/share/kirin/russian.json" "$TUTOR_TAG" "$RUSSIAN_DIR" "$(cat "$r/dictionary.name")" "$r/kiwix.list" <<'PY'
+  python3 - "$ROOTFS/usr/share/kirin/russian.json" "$TUTOR_TAG" "$RUSSIAN_DIR" "$(cat "$r/dictionary.name" 2>/dev/null)" "$r/kiwix.list" <<'PY'
 import json, sys
 out, model, root, zim, listing = sys.argv[1:]
-kiwix = {'wiktionary': f'{root}/dictionary/{zim}'}
+kiwix = {'wiktionary': f'{root}/dictionary/{zim}'} if zim else {}
 for line in open(listing, encoding='utf-8'):
     if '\t' in line:
         key, name = line.rstrip('\n').split('\t', 1)
         kiwix[key] = f'{root}/dictionary/{name}'
 json.dump({'model': model, 'root': root, 'piper': '/opt/kirin/piper/piper',
            'voices': root + '/voices', 'library': root + '/library',
-           'dictionary': f'{root}/dictionary/{zim}', 'kiwix': kiwix,
+           'dictionary': f'{root}/dictionary/{zim}' if zim else '', 'kiwix': kiwix,
            'audiobooks': root + '/audiobooks', 'mezhdunami': root + '/mezhdunami',
            'vocab': '/usr/share/kirin/russian/vocab.tsv'}, open(out, 'w'), indent=2)
 PY
@@ -625,11 +632,18 @@ PY
 audit_russian() {
   if [ "$NO_RUSSIAN" -eq 1 ]; then echo 'skipped (--no-russian)'; return 0; fi
   local dest="$ROOTFS$RUSSIAN_DIR" ok=0
-  python3 "$REPO/scripts/build/qwen-index.py" --models "$ROOTFS/usr/share/ollama/.ollama/models" \
-      --tag "$TUTOR_TAG" --out "$WORK/tutor-blobs.check" || ok=1
   [ -x "$ROOTFS/opt/kirin/piper/piper" ] || { echo 'Piper missing'; ok=1; }
   (cd "$dest/voices" && sha256sum --quiet -c SHA256SUMS) || ok=1
   [ "$(grep -cs '\.onnx$' "$dest/voices/SHA256SUMS")" = 4 ] || { echo 'expected four Russian voices'; ok=1; }
+  [ -f "$ROOTFS/usr/share/kirin/russian/vocab.tsv" ] || { echo 'Russian word list missing'; ok=1; }
+  [ -f "$ROOTFS/usr/share/kirin/russian.json" ] || { echo 'russian.json missing'; ok=1; }
+  [ -x "$ROOTFS/usr/bin/kirin-content" ] || { echo 'kirin-content missing'; ok=1; }
+  if [ "$CONTENT" != bundled ]; then
+    echo 'content: on-demand (tutor, library, dictionaries, audiobooks and textbook come from kirin-content)'
+    return "$ok"
+  fi
+  python3 "$REPO/scripts/build/qwen-index.py" --models "$ROOTFS/usr/share/ollama/.ollama/models" \
+      --tag "$TUTOR_TAG" --out "$WORK/tutor-blobs.check" || ok=1
   # The course library is optional (its sources may move); verify whatever was fetched.
   if [ -s "$dest/library/SHA256SUMS" ]; then (cd "$dest/library" && sha256sum --quiet -c SHA256SUMS) || ok=1; fi
   echo "library: $(cat "$dest/library/SHA256SUMS" 2>/dev/null | wc -l) files"
@@ -655,9 +669,42 @@ simulate_and_purge() {
   local name=$1; shift
   in_chroot simulate-purge "$@" > "$AUDIT/purge-$name.txt"
   python3 "$REPO/scripts/build/check-removal.py" --requested "$@" \
-      --allow "${ALLOW_REMOVAL[@]}" --model-owners "$UPSTREAM/upstream-models-owners.json" \
-      < "$AUDIT/purge-$name.txt" || return 1
+      --allow "${ALLOW_REMOVAL[@]}" < "$AUDIT/purge-$name.txt" || return 1
   in_chroot purge "$@"
+}
+
+# Packages that only exist to carry or run openKylin's AI models. A package that merely
+# embeds a model in an application (e.g. the photo viewer) is kept and reported.
+AI_PKG_RE='^kylin-ai|aiassistant|-model(-|$)|model-onnx|-ai-(runtime|engine|subsystem|python)'
+
+purge_upstream_models() {
+  local owners="$UPSTREAM/upstream-models-owners.json" kept_file="$UPSTREAM/kept-model-owners.txt"
+  local -a all=() ai=() kept=() extra=() installed=()
+  : > "$kept_file"
+  [ -s "$owners" ] || { info 'no model inventory; nothing to remove'; return 0; }
+  mapfile -t all < <(python3 -c 'import json,sys; print("\n".join(sorted({e["package"] for e in json.load(open(sys.argv[1])).values() if isinstance(e, dict) and e.get("package")})))' "$owners")
+  [ ${#all[@]} -gt 0 ] || return 0
+  mapfile -t installed < <(in_chroot installed "${all[@]}" | sed "/^$/d")
+  local p e
+  for p in "${installed[@]}"; do
+    if [[ $p =~ $AI_PKG_RE ]]; then ai+=("$p"); else kept+=("$p"); fi
+  done
+  if [ ${#ai[@]} -gt 0 ]; then
+    # Packages that only run these models go too; anything else stays protected by the review.
+    in_chroot simulate-purge "${ai[@]}" > "$AUDIT/purge-models-plan.txt"
+    mapfile -t extra < <(sed -nE 's/^(Remv|Purg) ([^ :]+).*/\2/p' "$AUDIT/purge-models-plan.txt" | grep -vxF -f <(printf '%s\n' "${ai[@]}") || true)
+    for e in "${extra[@]}"; do [[ $e =~ $AI_PKG_RE ]] && ai+=("$e"); done
+    info "removing openKylin's AI models: ${ai[*]}"
+    if ! simulate_and_purge models "${ai[@]}"; then
+      info 'removing them together would take other packages with them; trying one by one'
+      for p in "${ai[@]}"; do
+        [ -n "$(in_chroot installed "$p")" ] || continue
+        simulate_and_purge "model-$p" "$p" || { kept+=("$p"); info "KEPT $p: removing it would take other packages; see $AUDIT/purge-model-$p.txt"; }
+      done
+    fi
+  fi
+  for p in "${kept[@]}"; do echo "$p" >> "$kept_file"; done
+  [ ${#kept[@]} -eq 0 ] || info "kept (a model is part of the application): ${kept[*]}"
 }
 
 purge_reviewed() {
@@ -667,7 +714,7 @@ purge_reviewed() {
   for p in "${wanted[@]}"; do
     case "$p" in *\?) optional+=("${p%\?}") ;; *) required+=("$p") ;; esac
   done
-  mapfile -t installed < <(in_chroot installed "${required[@]}")
+  mapfile -t installed < <(in_chroot installed "${required[@]}" | sed "/^$/d")
   if [ ${#installed[@]} -gt 0 ]; then
     info "requested purge: ${installed[*]}"
     simulate_and_purge required "${installed[@]}" || die "purge refused; inspect $AUDIT/purge-required.txt"
@@ -684,10 +731,13 @@ purge_reviewed() {
 
 stage_customise() {
   log 'Customising the image'
-  [ -f "$PAYLOADS/qwen-blobs.json" ] || die 'run the payloads stage first'
+  [ "$CONTENT" != bundled ] || [ -f "$PAYLOADS/qwen-blobs.json" ] || pull_qwen
   # Payloads added after a first run (e.g. the libfyaml source) are fetched here.
   [ -f "$PAYLOADS/libfyaml-$FYAML_VERSION.tar.gz" ] || fetch_libfyaml
-  [ "$NO_RUSSIAN" -eq 1 ] || [ -f "$PAYLOADS/russian/dictionary.name" ] || fetch_russian
+  if [ "$NO_RUSSIAN" -eq 0 ]; then
+    if [ "$CONTENT" = bundled ]; then [ -f "$PAYLOADS/russian/dictionary.name" ] || fetch_russian
+    else [ -f "$PAYLOADS/russian/core.done" ] || fetch_russian; fi
+  fi
   [ "$NO_EXTRA_REPOS" -eq 1 ] || [ -f "$PAYLOADS/kirin-debian.gpg" ] || fetch_debian_keys
   [ -d "$PAYLOADS/proton" ] || fetch_proton
   fetch_kirin_key
@@ -709,14 +759,18 @@ stage_customise() {
   install -D -m 0644 "$REPO/packaging/systemd/ollama.service" "$ROOTFS/etc/systemd/system/ollama.service"
   local dest="$ROOTFS/usr/share/ollama/.ollama/models"
   rm -rf "$dest"; mkdir -p "$dest"
-  cp -al "$PAYLOADS/models/." "$dest/" 2>/dev/null || { rm -rf "$dest"; mkdir -p "$dest"; cp -a "$PAYLOADS/models/." "$dest/"; }
-  install -D -m 0644 "$PAYLOADS/qwen-blobs.json" "$ROOTFS/usr/share/kirin/qwen-blobs.json"
-  install -D -m 0644 "$UPSTREAM/upstream-models.json" "$ROOTFS/usr/share/kirin/upstream-models.json"
+  if [ "$CONTENT" = bundled ]; then
+    cp -al "$PAYLOADS/models/." "$dest/" 2>/dev/null || { rm -rf "$dest"; mkdir -p "$dest"; cp -a "$PAYLOADS/models/." "$dest/"; }
+    install -D -m 0644 "$PAYLOADS/qwen-blobs.json" "$ROOTFS/usr/share/kirin/qwen-blobs.json"
+  else
+    rm -f "$ROOTFS/usr/share/kirin/qwen-blobs.json" "$ROOTFS/usr/share/kirin/tutor-blobs.json"
+  fi
   install_russian
 
   mount_chroot
   info 'installing base packages'; in_chroot install
   info 'removing Token Centre, Software Store, Kylin ID, WPS Office and the openKylin AI assistant app'; purge_reviewed
+  purge_upstream_models
   in_chroot cleanup-removed | sed 's/^/    /'
   if [ "$NO_EXTRA_REPOS" -eq 0 ]; then
     info 'adding pinned Ubuntu 26.04 and Debian 13 repositories'
@@ -791,9 +845,11 @@ stage_audit() {
       echo "FAIL $name" >> "$summary"; info "FAIL  $name (see $AUDIT/$name.log)"; failed=1
     fi
   }
+  local -a coder=()
+  [ "$CONTENT" != bundled ] || coder=(--qwen-index "$PAYLOADS/qwen-blobs.json" --qwen-blobs "$ROOTFS/usr/share/ollama/.ollama/models/blobs")
   run_audit ai-payload python3 "$REPO/scripts/check-image-contract.py" \
-      --upstream-inventory "$UPSTREAM/upstream-models.json" --candidate-root "$ROOTFS" \
-      --qwen-index "$PAYLOADS/qwen-blobs.json" --qwen-blobs "$ROOTFS/usr/share/ollama/.ollama/models/blobs"
+      --upstream-inventory "$UPSTREAM/upstream-models.json" --owners "$UPSTREAM/upstream-models-owners.json" \
+      --kept "$UPSTREAM/kept-model-owners.txt" --candidate-root "$ROOTFS" "${coder[@]}"
   run_audit software python3 "$REPO/scripts/audit-software-image.py" --root "$ROOTFS"
   run_audit language python3 "$REPO/scripts/kirin-localise.py" --root "$ROOTFS" --audit
   run_audit accounts python3 "$REPO/scripts/audit-online-accounts.py" --root "$ROOTFS"
@@ -909,9 +965,9 @@ PY
   (cd "$OUT" && sha256sum "$(basename "$iso_out")" > "$(basename "$iso_out").sha256")
 
   python3 - "$OUT/$(basename "$iso_out" .iso).build.json" "$UPSTREAM/iso.json" "$AUDIT/summary" \
-      "$iso_out" "$OLLAMA_VERSION" "$TEST_BUILD" <<'PY'
+      "$iso_out" "$OLLAMA_VERSION" "$TEST_BUILD" "$CONTENT" <<'PY'
 import hashlib, json, sys
-out, upstream, summary, iso, ollama, test = sys.argv[1:]
+out, upstream, summary, iso, ollama, test, content = sys.argv[1:]
 record = {
     'upstream_iso': json.load(open(upstream)),
     'output': iso.rsplit('/', 1)[-1],
@@ -919,8 +975,9 @@ record = {
     'ollama': ollama, 'coding_model': 'qwen2.5-coder:7b-instruct',
     'audits': dict(reversed(l.split()) for l in open(summary) if l.strip()),
     'test_build': test == '1',
-    'not_yet_implemented': ['OpenZFS root and ZFSBootMenu', 'systemd birthDate removal',
-                            'MX Package Installer port', 'Web App Studio'],
+    'content': content,
+    'not_yet_implemented': ['systemd birthDate removal', 'MX Package Installer port', 'Web App Studio',
+                            "openKylin's graphical installer installs openKylin's OSTree commit, not Kirin"],
 }
 json.dump(record, open(out, 'w'), indent=2)
 PY

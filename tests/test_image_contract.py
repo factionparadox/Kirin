@@ -11,16 +11,29 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
 class ContractTests(unittest.TestCase):
-    def test_preserve_upstream(self):
+    def test_upstream_models_must_be_gone(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
-            (root/'usr/share/ai/model').parent.mkdir(parents=True)
-            (root/'usr/share/ai/model').write_bytes(b'kept')
-            sha = hashlib.sha256(b'kept').hexdigest()
-            inv = root/'inventory.json'; inv.write_text(json.dumps({'usr/share/ai/model':sha}))
-            self.assertEqual(module.verify_existing_models(inv,root), [])
-            (root/'usr/share/ai/model').write_bytes(b'changed')
-            self.assertTrue(module.verify_existing_models(inv,root))
+            for rel in ('usr/share/kylin-ai/asr.onnx', 'usr/share/viewer/matting.onnx'):
+                (root / rel).parent.mkdir(parents=True, exist_ok=True)
+                (root / rel).write_bytes(b'model')
+            inv = root / 'inventory.json'
+            inv.write_text(json.dumps({'usr/share/kylin-ai/asr.onnx': '0' * 64, 'usr/share/viewer/matting.onnx': '1' * 64}))
+            owners = root / 'owners.json'
+            owners.write_text(json.dumps({'usr/share/kylin-ai/asr.onnx': {'package': 'kylin-speech-asr-model-onnx'},
+                                          'usr/share/viewer/matting.onnx': {'package': 'kylin-photo-viewer'}}))
+            kept = root / 'kept.txt'; kept.write_text('kylin-photo-viewer\n')
+            problems, notes = module.verify_models_removed(inv, owners, kept, root)
+            self.assertEqual(problems, ['openKylin AI model still present: usr/share/kylin-ai/asr.onnx (kylin-speech-asr-model-onnx)'])
+            self.assertEqual(notes, ['kept inside kylin-photo-viewer: usr/share/viewer/matting.onnx'])
+            (root / 'usr/share/kylin-ai/asr.onnx').unlink()
+            self.assertEqual(module.verify_models_removed(inv, owners, kept, root)[0], [])
+
+    def test_on_demand_needs_no_coding_model(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td); inv = root / 'inventory.json'; inv.write_text('{}')
+            self.assertEqual(module.main(['--upstream-inventory', str(inv), '--candidate-root', str(root)]), 0)
+
     def test_verify_coder_payload(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td); blobs=root/'blobs'; blobs.mkdir()
@@ -36,6 +49,6 @@ class ContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td); inv=root/'inventory.json'
             inv.write_text(json.dumps({'../private': '0'*64}))
-            self.assertTrue(module.verify_existing_models(inv,root))
+            self.assertTrue(module.verify_models_removed(inv, None, None, root)[0])
 
 if __name__ == '__main__': unittest.main()

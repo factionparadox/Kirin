@@ -156,6 +156,10 @@ def ask_code(question):
     try:
         with request.urlopen(req, timeout=120) as response:
             data = json.load(response)
+    except error.HTTPError as exc:
+        if exc.code == 404:
+            raise RuntimeError(f'The coding model {MODEL} is not downloaded yet: sudo kirin-content install ai-coder') from exc
+        raise RuntimeError(f'Local Ollama error {exc.code}: {exc.reason}') from exc
     except (error.URLError, TimeoutError) as exc:
         raise RuntimeError(f'Local Ollama unavailable at {API}: {exc}') from exc
     answer = data.get('message', {}).get('content')
@@ -190,6 +194,11 @@ def chat(model, messages, stream_to=None):
                     stream_to.flush()
                 stream_to.write('\n')
                 answer = ''.join(parts)
+    except error.HTTPError as exc:
+        if exc.code == 404:
+            pack = 'ai-tutor' if model.startswith('qwen3') else 'ai-coder'
+            raise RuntimeError(f'The AI model {model} is not downloaded yet: sudo kirin-content install {pack}') from exc
+        raise RuntimeError(f'Local Ollama error {exc.code}: {exc.reason}') from exc
     except (error.URLError, TimeoutError) as exc:
         raise RuntimeError(f'Local Ollama unavailable at {API}: {exc}. Is the ollama service running?') from exc
     if not isinstance(answer, str) or not answer:
@@ -273,7 +282,7 @@ def say(text, voice='irina', output=None):
 def library(open_folder=False):
     root = Path(russian_config()['library'])
     if not root.is_dir():
-        raise FileNotFoundError(f'Russian course library not installed at {root}')
+        raise FileNotFoundError('Russian course library not downloaded yet: sudo kirin-content install ru-course')
     if open_folder:
         return subprocess.call(['xdg-open', str(root)])
     print(f'Russian course library: {root}\n')
@@ -289,7 +298,7 @@ def library(open_folder=False):
 def dictionary():
     zim = russian_config().get('dictionary')
     if not zim or not Path(zim).is_file():
-        raise FileNotFoundError('Wiktionary dictionary not installed')
+        raise FileNotFoundError('Dictionaries not downloaded yet: sudo kirin-content install ru-dictionaries')
     return subprocess.call(['flatpak', 'run', 'org.kiwix.desktop', zim])
 
 
@@ -404,7 +413,7 @@ def vocab(level=None, new=10, reverse=False, speak=False, stats=False, ask=input
 def audiobooks():
     catalog = Path(russian_config()['audiobooks']) / 'catalog.json'
     if not catalog.is_file():
-        raise FileNotFoundError('Russian audiobooks not installed')
+        raise FileNotFoundError('Russian audiobooks not downloaded yet: sudo kirin-content install ru-audiobooks')
     return json.loads(catalog.read_text(encoding='utf-8'))
 
 
@@ -431,14 +440,15 @@ def read(what):
     if what == 'mezhdunami':
         index = Path(russian_config()['mezhdunami']) / 'index.html'
         if not index.is_file():
-            raise FileNotFoundError('Между нами textbook not installed')
+            raise FileNotFoundError('Между нами not downloaded yet: sudo kirin-content install ru-course')
         return subprocess.call(['xdg-open', str(index)])
     zims = russian_config().get('kiwix') or {}
     if what == 'wiktionary' and not zims.get(what):
         zims = {**zims, 'wiktionary': russian_config().get('dictionary')}
     zim = zims.get(what)
     if not zim or not Path(zim).is_file():
-        raise FileNotFoundError(f'{KIWIX_NAMES.get(what, what)} not installed')
+        raise FileNotFoundError(f'{KIWIX_NAMES.get(what, what)} not downloaded yet: sudo kirin-content install '
+                                + ('ru-reading' if what in ('wikisource', 'wikipedia') else 'ru-dictionaries'))
     return subprocess.call(['flatpak', 'run', 'org.kiwix.desktop', zim])
 
 

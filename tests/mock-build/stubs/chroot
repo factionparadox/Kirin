@@ -23,6 +23,11 @@ elif step == 'simulate-purge':
     if extra: print('Remv openkylin-desktop-meta [1]')
 elif step == 'purge':
     gone = set(args) | ({'openkylin-desktop-meta'} if extra else set())
+    for p in gone:   # like dpkg: remove the package's files
+        lst = root / 'var/lib/dpkg/info' / f'{p}.list'
+        if lst.is_file():
+            for f in lst.read_text().split():
+                (root / f.lstrip('/')).unlink(missing_ok=True)
     write([p for p in pkgs if p not in gone])
 elif step == 'flatpak':
     for app in ('io.github.flattool.Warehouse', 'com.github.tchx84.Flatseal'):
@@ -30,7 +35,7 @@ elif step == 'flatpak':
         e = root / 'var/lib/flatpak/exports/share/applications' / f'{app}.desktop'
         e.parent.mkdir(parents=True, exist_ok=True); e.write_text('[Desktop Entry]\nName=App\n')
 elif step == 'finish':
-    assert (root / 'usr/share/ollama/.ollama/models/blobs').is_dir()
+    assert (root / 'usr/share/ollama/.ollama/models').is_dir()
 elif step == 'extra-repos':
     assert (root / 'kirin-build/extra-repos/kirin-debian.gpg').is_file(), 'Debian keyring not staged'
     print('ENABLED debian (pinned below openKylin)')
