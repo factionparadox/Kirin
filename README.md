@@ -14,10 +14,10 @@
 | Accounts | Local accounts only: no Kylin ID, token centre, cloud sync or device registration ([Accounts](docs/ACCOUNTS.md)) |
 | Applications | LibreOffice (English and Russian), VLC, mpv, Proton VPN, Pass and Mail (official packages), Discord, Sober, ani-cli; WPS Office removed |
 | Software | APT for the system, with Ubuntu 26.04 and Debian 13 added below openKylin for packages it lacks (never replacing its own); Flatpak with Warehouse and Flatseal instead of openKylin's Software Store ([Software](docs/SOFTWARE.md)) |
-| Local AI | Ollama with Qwen2.5-Coder 7B (coding) and Qwen3 30B (Russian tutor), chat in Alpaca; every openKylin AI model kept. All of it works offline, and nothing leaves the computer |
+| Local AI | Ollama with Qwen2.5-Coder 7B (coding) and Qwen3 30B (Russian tutor), chat in Alpaca; every openKylin AI model kept. Tuned for a laptop: a model stays loaded between questions and only one is in memory at a time. All of it works offline, and nothing leaves the computer |
 | Learning | Kirin Learn: offline Linux lessons, safe command explanations, Vim and Neovim tutors ([Education](docs/EDUCATION.md)) |
-| Russian, A1 to B2 | The *Между нами* textbook with audio, FSI, DLI and Peace Corps courses, a 10,000-word spaced-repetition drill, 29 LibriVox audiobooks, Russian Wikisource, Wikipedia and Wiktionary, Piper voices and the AI tutor ([Russian learning kit](docs/RUSSIAN.md)) |
-| Hardware | Tuned for the Framework Laptop 13 Pro (Intel Core Ultra Series 3): fingerprint login with fprintd, GPU video decoding, firmware updates with fwupd, `framework_tool`, thermald and power profiles, zram swap ([Hardware](docs/HARDWARE.md)) |
+| Russian, A1 to B2 | The *Между нами* textbook with audio, FSI, DLI and Peace Corps courses, a 10,000-word spaced-repetition drill, 29 LibriVox audiobooks, Russian Wikisource, Wikipedia and Wiktionary, Piper voices and the AI tutor, with a study plan from the alphabet to B2 ([Russian learning kit](docs/RUSSIAN.md), [learning Russian with Kirin](#learning-russian-with-kirin)) |
+| Hardware | Tuned for the Framework Laptop 13 Pro (Intel Core Ultra Series 3): fingerprint login with fprintd, GPU video decoding, current Intel microcode and thermald from Ubuntu 26.04, power profiles, firmware updates with fwupd, `framework_tool`, zram swap ([Hardware](docs/HARDWARE.md)) |
 | OpenZFS root | Optional installer with an OpenZFS root (encryption optional), separate `/home`, ZFSBootMenu, a snapshot before every APT change and `kirin-be` boot environments for rollback; the normal openKylin installer stays available ([ZFS](docs/ZFS.md)) |
 | Kirin packages | Built from pinned upstream sources and published as a signed APT repository ([Kirin repo](docs/KIRIN-REPO.md)) |
 
@@ -45,6 +45,14 @@ Useful options:
 
 Downloads are verified against published checksums where they exist and pinned on first download where they do not. Nothing is fetched twice. Full details: [Building the ISO](docs/BUILDING.md), [Image build checks](docs/IMAGE-BUILD.md).
 
+## Installing
+
+1. Write the ISO to a USB 3 stick with Ventoy and boot it (normal mode, not Ventoy's memdisk mode). The live session runs from the stick, so a fast stick makes it far more pleasant.
+2. On a new Framework 13 Pro, set the date and time in the BIOS first: with the factory clock, installers can hang on the boot splash.
+3. Choose an installer:
+   * **Install Kirin Linux**, openKylin's graphical installer, for an ordinary install.
+   * **Install Kirin on ZFS** (`sudo kirin-zfs-install`) for an OpenZFS root with snapshots and rollback. It erases the whole disk you choose, and needs **Secure Boot turned off**. Rehearse first with `sudo kirin-zfs-install --dry-run`. See [ZFS](docs/ZFS.md).
+
 ## First steps after installing
 
 ~~~sh
@@ -69,6 +77,16 @@ kirin-learn read wikisource              # Russian literature in Kiwix
 ~~~
 
 Lessons explain commands without running them, and system inspection is read-only. Everything works offline without an account; only `ask-code` and `russian` use the local AI.
+
+## Learning Russian with Kirin
+
+Start with `kirin-learn path`: it lays out what to study at each level and tracks your word progress. Reaching B2 takes roughly **900-1,200 hours** for an English speaker, which is about **12-18 months at two to three hours a day**, or three years at an hour a day. Watching a favourite series dubbed in Russian becomes possible at A2 with Russian subtitles and comfortable around B2.
+
+Kirin covers the courses, words, listening, reading and practice with an AI. It cannot give you real conversation, and B2 needs plenty of it:
+
+* **A class.** Local adult-education Russian courses add a teacher and speaking practice every week.
+* **Language exchange.** Apps such as HelloTalk and Tandem pair you with Russian speakers learning English; start texting at A1 and add weekly calls around A2.
+* **Short bursts.** On your phone, a flashcard app or Kirin's audiobooks beat doomscrolling in a queue.
 
 ## What's not done yet
 
