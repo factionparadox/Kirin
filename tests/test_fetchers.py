@@ -5,7 +5,9 @@ import http.server
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
+import subprocess
 import tempfile
 import threading
 import unittest
@@ -24,6 +26,7 @@ files = load('fetch-files')
 kiwix = load('fetch-kiwix')
 archive = load('fetch-archive')
 mezhdu = load('fetch-mezhdunami')
+mirror = load('fetch-mirror')
 
 
 def quiet(fn, *args):
@@ -256,3 +259,74 @@ class TestFetchMezhdunami(Server):
 
     def test_unreachable_site_fails(self):
         self.assertEqual(quiet(mezhdu.main, ['--base', self.url + 'missing/', '--dest', str(self.base / 'x')]), 1)
+
+
+class TestMirror(Server):
+    """scripts/publish-content.sh packs and splits; fetch-mirror.py verifies and reassembles."""
+
+    def make_payloads(self):
+        work = self.base / 'work'
+        r = work / 'payloads/russian'
+        content = {'library': {'FSI Russian/FAST/Lessons 1-5.pdf': os.urandom(5000), 'Peace Corps/Course.pdf': b'%PDF'},
+                   'audiobooks': {'A2/Сказки - Afanasyev/01.mp3': os.urandom(7000), 'catalog.json': b'[]'},
+                   'voices': {'ru_RU-irina-medium.onnx': os.urandom(3000)}}
+        for folder, files in content.items():
+            for rel, data in files.items():
+                p = r / folder / rel; p.parent.mkdir(parents=True, exist_ok=True); p.write_bytes(data)
+            lines = [f'{hashlib.sha256(d).hexdigest()}  {rel}' for rel, d in sorted(files.items())]
+            (r / folder / 'SHA256SUMS').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+        return work, content
+
+    def publish(self):
+        work, content = self.make_payloads()
+        mirror_json = self.base / 'mirror.json'
+        env = {**os.environ, 'KIRIN_MIRROR_PART_SIZE': '4k', 'KIRIN_MIRROR_JSON': str(mirror_json)}
+        result = subprocess.run(['bash', str(BUILD.parent / 'publish-content.sh'), '--work', str(work), '--dry-run'],
+                                capture_output=True, text=True, env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for part in (work / 'mirror/content-v1').glob('*.tar.[0-9][0-9]'):
+            self.publish_file(part)
+        return mirror_json, content
+
+    def publish_file(self, path):
+        (self.site / path.name).write_bytes(path.read_bytes())
+
+    def fetch(self, mirror_json, pack, dest):
+        return quiet(mirror.main, ['--mirror', str(mirror_json), '--pack', pack, '--dest', str(dest), '--base', self.url])
+
+    def test_round_trip(self):
+        mirror_json, content = self.publish()
+        index = json.loads(mirror_json.read_text())
+        self.assertEqual(set(index['packs']), {'ru-course', 'ru-audiobooks', 'ru-voices'})
+        self.assertGreater(len(index['packs']['ru-audiobooks']['parts']), 1)          # split into parts
+        self.assertTrue(index['url'].endswith('/releases/download/content-v1/'))
+        for pack, folder in (('ru-course', 'library'), ('ru-audiobooks', 'audiobooks'), ('ru-voices', 'voices')):
+            dest = self.base / 'installed' / folder
+            self.assertEqual(self.fetch(mirror_json, pack, dest), 0, pack)
+            for rel, data in content[folder].items():
+                self.assertEqual((dest / rel).read_bytes(), data, rel)
+        self.assertFalse(list((self.base / 'installed').glob('.kirin-mirror-*')))   # working files cleaned up
+
+    def test_tampered_part_and_unknown_pack(self):
+        mirror_json, _ = self.publish()
+        first = json.loads(mirror_json.read_text())['packs']['ru-audiobooks']['parts'][0]['name']
+        (self.site / first).write_bytes(b'tampered')
+        dest = self.base / 'books'
+        self.assertEqual(self.fetch(mirror_json, 'ru-audiobooks', dest), 1)
+        self.assertFalse(dest.exists())
+        self.assertEqual(self.fetch(mirror_json, 'ai-tutor', dest), 3)
+        self.assertEqual(self.fetch(self.base / 'missing.json', 'ru-course', dest), 3)
+
+    def test_unsafe_archive_refused(self):
+        import tarfile
+        evil = self.base / 'evil.tar'
+        with tarfile.open(evil, 'w') as tar:
+            info = tarfile.TarInfo('ru-course/../../escape.txt'); data = b'x'; info.size = 1
+            tar.addfile(info, io.BytesIO(data))
+        sha = hashlib.sha256(evil.read_bytes()).hexdigest()
+        (self.site / 'evil.tar.00').write_bytes(evil.read_bytes())
+        m = self.base / 'm.json'
+        m.write_text(json.dumps({'url': self.url, 'packs': {'ru-course': {'size': evil.stat().st_size, 'sha256': sha,
+                     'parts': [{'name': 'evil.tar.00', 'size': evil.stat().st_size, 'sha256': sha}]}}}))
+        self.assertEqual(self.fetch(m, 'ru-course', self.base / 'x' / 'library'), 1)
+        self.assertFalse((self.base / 'escape.txt').exists())

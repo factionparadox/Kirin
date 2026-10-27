@@ -33,6 +33,7 @@ ARCHIVE = os.environ.get('KIRIN_CONTENT_ARCHIVE', 'https://archive.org/')
 MEZHDUNAMI = os.environ.get('KIRIN_CONTENT_MEZHDUNAMI', 'https://mezhdunami.org/')
 OLLAMA = os.environ.get('KIRIN_CONTENT_OLLAMA', 'ollama')
 YTDLP = os.environ.get('KIRIN_CONTENT_YTDLP', 'yt-dlp')
+MIRROR_BASE = os.environ.get('KIRIN_CONTENT_MIRROR', '')   # tests only
 
 ZIMS = {   # key: (Kiwix directory, file prefix)
     'wiktionary': ('wiktionary', 'wiktionary_en_all_nopic_'),
@@ -105,6 +106,17 @@ def update_config() -> None:
     CONFIG.write_text(json.dumps(config, indent=2) + '\n', encoding='utf-8')
 
 
+def from_mirror(pack: str, dest: Path) -> bool:
+    """Kirin's own copy (GitHub release), verified; False means use the original sources."""
+    args = helper('fetch-mirror.py', '--mirror', str(LIB / 'mirror.json'), '--pack', pack, '--dest', str(dest))
+    if MIRROR_BASE:
+        args += ['--base', MIRROR_BASE]
+    result = subprocess.run(args)
+    if result.returncode == 1:
+        say('    Kirin mirror failed; trying the original sources')
+    return result.returncode == 0
+
+
 def fetch_zims(keys: list[str]) -> bool:
     ok = True
     for key in keys:
@@ -121,8 +133,9 @@ def install(pack: str) -> bool:
     if pack in MODELS:
         ok = run([OLLAMA, 'pull', MODELS[pack]])
     elif pack == 'ru-course':
-        ok = run(helper('fetch-files.py', '--manifest', str(LIB / 'library.tsv'), '--dest', str(RU / 'library'),
-                        '--lock', str(STATE / 'library.lock.json')))
+        ok = from_mirror(pack, RU / 'library') or run(
+            helper('fetch-files.py', '--manifest', str(LIB / 'library.tsv'), '--dest', str(RU / 'library'),
+                   '--lock', str(STATE / 'library.lock.json')))
         if not (RU / 'mezhdunami/index.html').is_file():   # normally already in the image
             ytdlp = shutil.which(YTDLP) or ''
             textbook = helper('fetch-mezhdunami.py', '--base', MEZHDUNAMI, '--dest', str(RU / 'mezhdunami'))
@@ -132,8 +145,9 @@ def install(pack: str) -> bool:
     elif pack == 'ru-reading':
         ok = fetch_zims(['wikisource', 'wikipedia'])
     elif pack == 'ru-audiobooks':
-        ok = run(helper('fetch-archive.py', '--manifest', str(LIB / 'audiobooks.tsv'), '--dest', str(RU / 'audiobooks'),
-                        '--base', ARCHIVE))
+        ok = from_mirror(pack, RU / 'audiobooks') or run(
+            helper('fetch-archive.py', '--manifest', str(LIB / 'audiobooks.tsv'), '--dest', str(RU / 'audiobooks'),
+                   '--base', ARCHIVE))
     else:
         raise KeyError(pack)
     if pack.startswith('ru-'):

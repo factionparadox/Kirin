@@ -1,5 +1,7 @@
 # Russian learning kit
 
+By default the AI tutor, course library, dictionaries, reading and audiobooks are downloaded after installing with **Kirin Content** (`sudo kirin-content`); Piper, the voices, the word list and the Между нами textbook are always in the ISO. See [Content](CONTENT.md). Build with `--content bundled` to put everything below in the image.
+
 Kirin's second supported language is also a subject it teaches, with enough material on the machine to go from the alphabet to B2. Everything below is bundled into the image and works offline. Leave it all out with `build/kirin-build.sh --no-russian`.
 
 | Component | Source | Licence / status | Size (approx.) | Installed at |

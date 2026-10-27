@@ -22,17 +22,10 @@ This is the first build stage. The resulting ISO boots and installs with openKyl
 
    Optionally add `--iso-sha256 HEX` to refuse an ISO that doesn't match openKylin's published checksum. Either way, the ISO's hash is recorded in the build record.
 
-3. The build **stops after the inventory stage** (exit code 10). Review `work/upstream/upstream-models.json` and `work/upstream/upstream-models-owners.json`:
-   - Every upstream AI model file should be listed.
-   - Nothing unrelated should be listed. Delete any wrong entries, and add missing files with their `sha256sum`.
-4. Continue past the review:
+3. The inventory stage lists openKylin's AI model files and the packages that carry them (`work/upstream/upstream-models*.json`). Kirin removes those packages during customise; an application that merely embeds a model (such as the photo viewer) is kept and listed in `work/upstream/kept-model-owners.txt`.
+4. The ISO, its `.sha256` and a `.build.json` record are written to `out/`.
 
-   ```sh
-   sudo build/kirin-build.sh --iso … --from inventory --accept-inventory \
-        --model-inventory work/upstream/upstream-models.json
-   ```
-
-5. The ISO, its `.sha256` and a `.build.json` record are written to `out/`.
+**Content.** By default (`--content on-demand`) the AI models and the big Russian material stay out of the ISO and are downloaded after installing with Kirin Content ([Content](CONTENT.md)); `--content bundled` puts them all in. openKylin's own AI models are always removed.
 
 The build resumes where it stopped. Completed stages are skipped. `--from STAGE` redoes a stage and everything after it, and `--only STAGE` runs a single stage.
 
@@ -55,8 +48,8 @@ The build resumes where it stopped. Completed stages are skipped. `--from STAGE`
 
 ## Safety gates
 
-- **Package removal is fail-closed.** Each purge is simulated first. The build stops if APT would remove anything not requested, or anything protected: UKUI, APT/dpkg, the installer, the updater, login/PAM, Flatpak, kernels, and any package that owns an upstream model file. After reviewing `work/audit/purge-required.txt`, allow a specific extra removal with `--allow-removal PKG`. Protected packages can never be allowed. Packages marked optional in `build/remove-packages.txt` (such as `kylin-id`) are purged separately; if their purge would be refused, they are kept with a warning and the accounts audit still reports them.
-- **The AI-payload contract is never waived.** If an inventoried upstream model changes or a coding-model blob is wrong, the build fails, even with `--test-build`.
+- **Package removal is fail-closed.** Each purge is simulated first. The build stops if APT would remove anything not requested, or anything protected: UKUI, APT/dpkg, the installer, the updater, login/PAM, Flatpak and kernels. Removing openKylin's model packages follows the same rule: if taking one would remove anything else, that one is kept and reported. After reviewing `work/audit/purge-required.txt`, allow a specific extra removal with `--allow-removal PKG`. Protected packages can never be allowed. Packages marked optional in `build/remove-packages.txt` (such as `kylin-id`) are purged separately; if their purge would be refused, they are kept with a warning and the accounts audit still reports them.
+- **The AI-payload contract is never waived.** If an openKylin model is still in the image (outside an application Kirin keeps), or a bundled coding-model blob is wrong, the build fails, even with `--test-build`.
 - **Policy audits gate release.** These are the software, language and accounts audits. `--test-build` packs the image anyway for testing; the ISO keeps its normal name (`kirin-YYYYMMDD-amd64.iso`) and the failed audits are printed and recorded in its `.build.json`. A first build will probably need this, because the language audit flags Chinese-only menu labels that still need real translations.
 
 ## Testing the ISO

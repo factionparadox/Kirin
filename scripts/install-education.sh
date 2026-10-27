@@ -9,11 +9,13 @@ install -D -m 0755 "$here/kirin_learn.py" "$root/usr/bin/kirin-learn"
 install -D -m 0755 "$here/kirin_welcome.py" "$root/usr/bin/kirin-welcome"
 install -D -m 0755 "$here/scripts/kirin-fingerprint" "$root/usr/bin/kirin-fingerprint"
 install -D -m 0755 "$here/scripts/kirin-content" "$root/usr/bin/kirin-content"
-for f in fetch-files.py fetch-kiwix.py fetch-archive.py fetch-mezhdunami.py; do
+for f in fetch-files.py fetch-kiwix.py fetch-archive.py fetch-mezhdunami.py fetch-mirror.py; do
   install -D -m 0644 "$here/scripts/build/$f" "$root/usr/lib/kirin/content/$f"
 done
 install -D -m 0644 "$here/packaging/russian/library.tsv" "$root/usr/lib/kirin/content/library.tsv"
 install -D -m 0644 "$here/packaging/russian/audiobooks.tsv" "$root/usr/lib/kirin/content/audiobooks.tsv"
+[ ! -f "$here/packaging/content/mirror.json" ] ||
+  install -D -m 0644 "$here/packaging/content/mirror.json" "$root/usr/lib/kirin/content/mirror.json"
 install -D -m 0755 "$here/scripts/kirin-zfs-install" "$root/usr/sbin/kirin-zfs-install"
 install -D -m 0755 "$here/scripts/kirin-be" "$root/usr/bin/kirin-be"
 install -D -m 0755 "$here/scripts/zfs-apt-snapshot" "$root/usr/lib/kirin/zfs-apt-snapshot"

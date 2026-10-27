@@ -30,6 +30,7 @@ KIRIN_REPO_URL='https://factionparadox.github.io/Kirin/apt'
 DEBIAN_KEYS=${KIRIN_TEST_DEBIAN_KEYS:-"https://ftp-master.debian.org/keys/archive-key-13.asc=04B54C3CDCA79751B16BC6B5225629DF75B188BD https://ftp-master.debian.org/keys/archive-key-13-security.asc=5E04A1E3223A19A20706E20F9904613D4CCE68C6"}
 VOICES_TSV=${KIRIN_TEST_VOICES_TSV:-$REPO/packaging/russian/voices.tsv}
 LIBRARY_TSV=${KIRIN_TEST_LIBRARY_TSV:-$REPO/packaging/russian/library.tsv}
+MIRROR_JSON=${KIRIN_TEST_MIRROR_JSON:-$REPO/packaging/content/mirror.json}
 AUDIOBOOKS_TSV=${KIRIN_TEST_AUDIOBOOKS_TSV:-$REPO/packaging/russian/audiobooks.tsv}
 ARCHIVE_BASE=${KIRIN_TEST_ARCHIVE_BASE:-https://archive.org/}
 MEZHDUNAMI_BASE=${KIRIN_TEST_MEZHDUNAMI_BASE:-https://mezhdunami.org/}
@@ -403,13 +404,22 @@ fetch_piper() {
   info "Piper $PIPER_VERSION verified"
 }
 
+# from_mirror PACK DEST: Kirin's own copy of a content pack (scripts/publish-content.sh), verified.
+from_mirror() {
+  [ -f "$MIRROR_JSON" ] || return 1
+  python3 "$REPO/scripts/build/fetch-mirror.py" --mirror "$MIRROR_JSON" --pack "$1" --dest "$2" \
+      ${KIRIN_TEST_MIRROR_BASE:+--base "$KIRIN_TEST_MIRROR_BASE"} |& sed 's/^/    /' && [ -s "$2/SHA256SUMS" ]
+}
+
 fetch_russian() {
   [ "$NO_RUSSIAN" -eq 0 ] || { info 'Russian extras skipped (--no-russian)'; return; }
   local r="$PAYLOADS/russian"
   mkdir -p "$r"
   fetch_piper
   info 'fetching Piper Russian voices'
-  python3 "$REPO/scripts/build/fetch-files.py" --manifest "$VOICES_TSV" \
+  [ -s "$r/voices/SHA256SUMS" ] && (cd "$r/voices" && sha256sum --quiet -c SHA256SUMS) 2>/dev/null ||
+    from_mirror ru-voices "$r/voices" ||
+    python3 "$REPO/scripts/build/fetch-files.py" --manifest "$VOICES_TSV" \
       --dest "$r/voices" --lock "$r/voices.lock.json" --required |& sed 's/^/    /' ||
     die 'could not fetch the Piper Russian voices'
   # The Между нами textbook always ships in the image: its licence allows a personal
@@ -422,7 +432,8 @@ fetch_russian() {
   fi
   pull_model "$TUTOR_TAG" "$PAYLOADS/tutor-blobs.json" 'about 19 GB'
   info 'fetching the Russian course library (DLI, FSI, Peace Corps)'
-  python3 "$REPO/scripts/build/fetch-files.py" --manifest "$LIBRARY_TSV" \
+  from_mirror ru-course "$r/library" ||
+    python3 "$REPO/scripts/build/fetch-files.py" --manifest "$LIBRARY_TSV" \
       --dest "$r/library" --lock "$r/library.lock.json" |& sed 's/^/    /' ||
     die 'the course library manifest could not be processed'
   info 'fetching the English Wiktionary for Kiwix (several GB)'
@@ -433,7 +444,8 @@ fetch_russian() {
   info "dictionary: $zim (checksum verified)"
   fetch_reading_zims
   info 'fetching Russian audiobooks (LibriVox, via the Internet Archive; several GB)'
-  python3 "$REPO/scripts/build/fetch-archive.py" --manifest "$AUDIOBOOKS_TSV" --dest "$r/audiobooks" \
+  from_mirror ru-audiobooks "$r/audiobooks" ||
+    python3 "$REPO/scripts/build/fetch-archive.py" --manifest "$AUDIOBOOKS_TSV" --dest "$r/audiobooks" \
       --base "$ARCHIVE_BASE" |& sed 's/^/    /' || die 'the audiobook manifest could not be processed'
 }
 
