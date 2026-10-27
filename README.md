@@ -109,15 +109,3 @@ Kirin covers the courses, words, listening, reading and practice with an AI. It 
 python3 -m unittest discover -s tests -v
 bash tests/mock-build/run.sh             # the whole builder, end to end, against stub tools
 ~~~
-
-## Credits
-
-Kirin is assembled almost entirely from other people's work, and keeps their licences and attribution:
-
-* **System:** [openKylin](https://www.openkylin.top/) and [UKUI](https://www.ukui.org/), [Ubuntu](https://ubuntu.com/) and [Debian](https://www.debian.org/) packages, [Flatpak](https://flatpak.org/), [Warehouse](https://github.com/flattool/warehouse), [Flatseal](https://github.com/tchx84/Flatseal), [kitty](https://sw.kovidgoyal.net/kitty/), [fish](https://fishshell.com/), [Fastfetch](https://github.com/fastfetch-cli/fastfetch), [Neovim](https://neovim.io/)
-* **AI:** [Ollama](https://ollama.com/), [Qwen](https://github.com/QwenLM) models, [Alpaca](https://github.com/Jeffser/Alpaca), [Piper](https://github.com/rhasspy/piper) and its voices
-* **Russian:** *Между нами* (University of Kansas), FSI, DLI and Peace Corps courses (via [fsi-language-courses.org](https://www.fsi-language-courses.org/) and [ERIC](https://eric.ed.gov/)), [LibriVox](https://librivox.org/) readers and the [Internet Archive](https://archive.org/), [Kiwix](https://kiwix.org/) and the Wikimedia projects, [OpenRussian](https://en.openrussian.org/), [FrequencyWords](https://github.com/hermitdave/FrequencyWords)
-* **Hosting:** [GitHub](https://github.com/) releases for Kirin's content mirror
-* **Storage:** [OpenZFS](https://openzfs.org/), [ZFSBootMenu](https://zfsbootmenu.org/)
-* **Hardware:** [Framework](https://frame.work/) (`framework_tool`, Linux guides), [fprintd/libfprint](https://fprint.freedesktop.org/), [fwupd](https://fwupd.org/), and the [nixos-hardware](https://github.com/NixOS/nixos-hardware) Framework modules
-* **Inspiration:** [Archon/Cognoscenti](https://github.com/factionparadox/Archon)
