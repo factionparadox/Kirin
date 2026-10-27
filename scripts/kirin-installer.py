@@ -8,6 +8,10 @@ image root. Never runs on /.
   Kirin turns that on (enable-swapfile=true), makes the size 0 in the scripts that
   compute it (so the root partition is not padded by it either), stops the swap
   file being created, and keeps the live session's zram out of the new fstab.
+* No backup partition: openKylin reserves a ninth of the disk (16-100 GB) for its
+  restore tool, which Kirin does not ship. Its scripts already have a layout without
+  it, used in virtual machines ("虚拟机去掉备份还原分区"); Kirin uses that layout on
+  every machine. The flag only chooses the partition layout.
 * English progress messages: the installer's scripts pick a message with
   `case ${LANGUAGES}`, and anything not listed (Kirin's en_GB) falls through to
   Chinese. The fallback branch now says what the en_US branch says. Hard-coded
@@ -32,9 +36,15 @@ CFGS = (f'{INSTALLER}/ky-installer.cfg', 'var/log/installer/ky-installer.cfg')
 SWAP_EDITS = [
     *[(c, r'^enable-swapfile=\S*$', 'enable-swapfile=true', '\nenable-swapfile=true\n') for c in CFGS],
     *[(c, r'^(custom-partitions="[^"\n]*?)swap;', r'\1', None) for c in CFGS],
+    *[(c, r'^(custom-partitions="[^"\n]*?)backup;', r'\1', None) for c in CFGS],
     *[(f'{INSTALLER}/{f}', *SWAP_RAM) for f in ('data/systemdatasize.sh', 'scripts/autopart.sh', 'scripts/autopart-efi.sh')],
     (f'{SCRIPTS}/prepare/18setup-swapfile', r'\A(#!/bin/bash\n\nset -e\n)(?!return 0)',
      r'\1return 0   # Kirin: no swap file\n', '\nreturn 0   # Kirin: no swap file\n'),
+    (f'{SCRIPTS}/utils', r'^readonly virtual_machine=\$\(get_value virtual-machine\)$',
+     'readonly virtual_machine=true   # Kirin: the layout without a backup partition, on every machine',
+     '\nreadonly virtual_machine=true   # Kirin:'),
+    (f'{INSTALLER}/data/systemdatasize.sh', r'^systemd-detect-virt \|\| do_backup_size$',
+     ': # Kirin: no backup partition', '\n: # Kirin: no backup partition'),
     (f'{SCRIPTS}/in_chroot/genfstab', r"^(\s*)(\[\[ \$device = \*'\\040\(deleted\)' \]\] && continue)$(?!\n\s*\[\[ \$device = /dev/zram)",
      r'\1\2\n\1[[ $device = /dev/zram* ]] && continue   # Kirin: zram-generator sets up zram', '/dev/zram* ]] && continue   # Kirin'),
 ]
@@ -146,7 +156,7 @@ def swap_edit(text: str, pattern: str, repl: str, marker: str | None) -> tuple[s
     new = re.sub(pattern, repl, text, count=1, flags=re.M)
     if new != text:
         return new, 'applied'
-    if marker is None or marker in text:
+    if marker is None or marker.strip('\n') in text:
         return text, 'done'
     return text, 'missing'
 
@@ -177,12 +187,12 @@ def apply(root: Path) -> list[str]:
     for rel, pattern, repl, marker in SWAP_EDITS:
         p = root / rel
         if not p.is_file():
-            notes.append(f'WARNING: /{rel} missing; swap not turned off there'); continue
+            notes.append(f'WARNING: /{rel} missing; partition layout not changed there'); continue
         new, state = swap_edit(p.read_text(), pattern, repl, marker)
         if state == 'applied':
-            write(p, new); notes.append(f'no swap: /{rel}')
+            write(p, new); notes.append(f'partition layout: /{rel}')
         elif state == 'missing':
-            notes.append(f'WARNING: /{rel} has changed upstream; swap not turned off there')
+            notes.append(f'WARNING: /{rel} has changed upstream; partition layout not changed there')
     changed, left = 0, []
     for p in scripts(root):
         text = read_script(p)
@@ -211,7 +221,7 @@ def audit(root: Path) -> list[str]:
             problems.append(f'/{rel} missing'); continue
         state = swap_edit(p.read_text(), pattern, repl, marker)[1]
         if state != 'done':
-            problems.append(f'/{rel}: swap still on' if state == 'applied' else f'/{rel}: changed upstream, swap edit does not fit')
+            problems.append(f'/{rel}: still openKylin\'s layout' if state == 'applied' else f'/{rel}: changed upstream, layout edit does not fit')
     for p in scripts(root):
         text = read_script(p)
         if text is None:

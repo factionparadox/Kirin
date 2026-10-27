@@ -41,7 +41,8 @@ if a[0] == '-d':
     cfg = '[config]\nenable-swapfile=false\n[custompartition]\ncustom-partitions="efi;boot;root;backup;data;swap;"\n'
     (I / 'ky-installer.cfg').write_text(cfg); (r / 'var/log/installer/ky-installer.cfg').write_text(cfg)
     for f in ('data/systemdatasize.sh', 'scripts/autopart.sh', 'scripts/autopart-efi.sh'):
-        (I / f).write_text('### swap\nswap=$(( ram * 12 / 1024 / 10 ))\n')
+        (I / f).write_text('systemd-detect-virt || do_backup_size\n### swap\nswap=$(( ram * 12 / 1024 / 10 ))\n')
+    (I / 'scripts/utils').write_text('readonly virtual_machine=$(get_value virtual-machine)\n')
     (I / 'scripts/prepare/18setup-swapfile').write_text('#!/bin/bash\n\nset -e\n\nswapfile=8192\n')
     (I / 'scripts/in_chroot/genfstab').write_text("    [[ $device = *'\\040(deleted)' ]] && continue\n")
     (r / 'usr/share/kylin-os-installer/scripts/prepare/16copy-basic-filesystem').write_text(

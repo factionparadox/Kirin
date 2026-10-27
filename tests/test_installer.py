@@ -41,11 +41,18 @@ EnableSwap=false
 '''
 SIZES = '''ram=$(cat < /proc/meminfo  | grep ^MemTotal: | awk '{print $2}')
 
+### backup
+backup_size=0
+systemd-detect-virt || do_backup_size
+
 ### swap
 swap=$(( ram * 12 / 1024 / 10 ))
 if [ $swap -gt 64000 ]; then
     swap=64000
 fi
+'''
+UTILS = '''#虚拟机去掉备份还原分区
+readonly virtual_machine=$(get_value virtual-machine)
 '''
 SWAPFILE = '''#!/bin/bash
 
@@ -72,7 +79,7 @@ class TestInstaller(unittest.TestCase):
         self.files = {}
         for rel, text in [(ki.CFGS[0], CFG), (ki.CFGS[1], CFG), (f'{ki.INSTALLER}/data/systemdatasize.sh', SIZES),
                           (f'{ki.SCRIPTS}/autopart.sh', SIZES), (f'{ki.SCRIPTS}/autopart-efi.sh', SIZES),
-                          (f'{ki.SCRIPTS}/prepare/18setup-swapfile', SWAPFILE), (f'{ki.SCRIPTS}/in_chroot/genfstab', GENFSTAB)]:
+                          (f'{ki.SCRIPTS}/prepare/18setup-swapfile', SWAPFILE), (f'{ki.SCRIPTS}/utils', UTILS), (f'{ki.SCRIPTS}/in_chroot/genfstab', GENFSTAB)]:
             f = self.root / rel; f.parent.mkdir(parents=True, exist_ok=True); f.write_text(text)
             self.files[rel] = f
 
@@ -100,13 +107,17 @@ class TestInstaller(unittest.TestCase):
         for c in ki.CFGS:
             cfg = self.files[c].read_text()
             self.assertIn('\nenable-swapfile=true\n', cfg)
-            self.assertIn('custom-partitions="efi;boot;root;backup;data;"', cfg)
+            self.assertIn('custom-partitions="efi;boot;root;data;"', cfg)
         for rel in ('data/systemdatasize.sh', 'scripts/autopart.sh', 'scripts/autopart-efi.sh'):
             sizes = self.files[f'{ki.INSTALLER}/{rel}'].read_text()
             self.assertIn('\nswap=0   # Kirin:', sizes)
             self.assertNotIn('ram * 12', sizes)
         self.assertIn('set -e\nreturn 0   # Kirin: no swap file\n\nis_automatic',
                       self.files[f'{ki.SCRIPTS}/prepare/18setup-swapfile'].read_text())
+        self.assertIn('\nreadonly virtual_machine=true   # Kirin', self.files[f'{ki.SCRIPTS}/utils'].read_text())
+        sizes = self.files[f'{ki.INSTALLER}/data/systemdatasize.sh'].read_text()
+        self.assertIn('\n: # Kirin: no backup partition\n', sizes)
+        self.assertNotIn('do_backup_size', sizes)
         fstab = self.files[f'{ki.SCRIPTS}/in_chroot/genfstab'].read_text()
         self.assertIn("continue\n    [[ $device = /dev/zram* ]] && continue   # Kirin", fstab)
 
@@ -114,7 +125,7 @@ class TestInstaller(unittest.TestCase):
         ki.apply(self.root)
         first = [f.read_text() for f in [self.script, *self.files.values()]]
         notes = ki.apply(self.root)
-        self.assertFalse([n for n in notes if n.startswith('no swap')], notes)
+        self.assertFalse([n for n in notes if n.startswith('partition layout')], notes)
         self.assertEqual(first, [f.read_text() for f in [self.script, *self.files.values()]])
 
     def test_changed_upstream_is_reported(self):
