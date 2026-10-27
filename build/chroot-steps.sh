@@ -406,6 +406,35 @@ case "$step" in
   manifest)
     dpkg-query -W --showformat='${Package}\t${Version}\n'
     ;;
+  ostree-commit)
+    # openKylin's graphical installer does not copy the live system: it deploys the
+    # OSTree commit in /sysroot/ostree/repo on the branch named in /etc/ostree-release
+    # (scripts/prepare/16copy-basic-filesystem). Commit the finished Kirin system there,
+    # in the layout openKylin's own commit uses, so that installer installs Kirin.
+    repo=/sysroot/ostree/repo
+    if [ ! -f "$repo/config" ] || [ ! -f /etc/ostree-release ]; then echo 'OSTREE: no repository in this image; skipped'; exit 0; fi
+    spec=$(sed -n 's/^version=\(.*:.*\)$/\1/p' /etc/ostree-release | head -1)   # remote:branch
+    remote=${spec%%:*} branch=${spec#*:}
+    reffile="$repo/refs/remotes/$remote/$branch"
+    [ -f "$reffile" ] || { echo "OSTREE: no ref $spec in the repository; skipped"; exit 0; }
+    old=$(cat "$reffile")
+    tree=/kirin-build/ostree-tree
+    sh /kirin-build/ostree-tree.sh / "$tree"
+    # Keep openKylin's update metadata (version, update-type...) from /etc/ostree-release.
+    set --
+    while IFS= read -r line; do
+      case "$line" in ''|'['*) ;; version=*:*) ;; *) set -- "$@" "--add-metadata-string=$line" ;; esac
+    done < /etc/ostree-release
+    new=$(ostree --repo="$repo" commit --orphan --tree=dir="$tree" \
+          --subject="Kirin Linux $(. /etc/kirin-release 2>/dev/null; echo "${KIRIN_VERSION:-1.0}")" \
+          --add-metadata-string=kirin=1 "$@")
+    printf '%s\n' "$new" > "$reffile"
+    rm -rf "$tree"
+    # Drop openKylin's commit and any objects only it used.
+    ostree --repo="$repo" prune --refs-only --depth=0 >/dev/null
+    ostree --repo="$repo" fsck --quiet >/dev/null 2>&1 || echo 'OSTREE WARNING: fsck reported problems'
+    echo "OSTREE: $spec -> $new (was $old)"
+    ;;
   *)
     echo "unknown step: $step" >&2; exit 2 ;;
 esac

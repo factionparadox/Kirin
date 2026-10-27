@@ -64,5 +64,8 @@ elif step == 'proton':
     print('NOT AVAILABLE: Proton pass')
 elif step == 'manifest':
     print('\n'.join(f'{p}\t1' for p in pkgs))
+elif step == 'ostree-commit':
+    assert (root / 'kirin-build/ostree-tree.sh').is_file(), 'ostree-tree.sh not staged'
+    print('OSTREE: no repository in this image; skipped')
 else:
     sys.exit(f'chroot stub: unknown step {step}')

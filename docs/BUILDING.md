@@ -2,7 +2,9 @@
 
 `build/kirin-build.sh` produces a Kirin installation ISO by **remastering the official openKylin 3.0 x86-64 ISO**. Remastering, rather than rebuilding from packages, is deliberate: it is the only way to guarantee that openKylin's own AI models and their integration reach Kirin byte-for-byte unchanged (see [IMAGE-BUILD.md](IMAGE-BUILD.md)).
 
-This is the first build stage. The resulting ISO boots and installs with openKylin's own boot loader and installer on ext4, not OpenZFS. See [What this build does not do yet](#what-this-build-does-not-do-yet).
+The resulting ISO boots with openKylin's boot loader and offers two installers: openKylin's graphical one (ext4) and Kirin's OpenZFS installer ([ZFS](ZFS.md)). See [What this build does not do yet](#what-this-build-does-not-do-yet).
+
+**How the graphical installer gets Kirin.** openKylin 3.0's installer does not copy the live system. It deploys an OSTree commit from `/sysroot/ostree/repo` in the image, on the branch named in `/etc/ostree-release`. So at the end of customise, the builder lays the finished Kirin system out the way openKylin's own commit is laid out (`/etc` in `/usr/etc`, `/opt` and `/srv` under `/var`, the kernel in `/usr/lib/modules`; `scripts/build/ostree-tree.sh`), commits it, points openKylin's branch at the new commit and prunes the old one. The installer itself is unchanged. The `ostree` audit checks the branch points at a commit that exists and was made by this build; `work/audit/ostree-build.log` has the details.
 
 ## Build host
 
@@ -40,10 +42,10 @@ The build resumes where it stopped. Completed stages are skipped. `--from STAGE`
 | preflight | Checks the host OS and architecture, root access, tools, Python version and free space |
 | verify | Records the ISO's SHA-256, size and volume ID, and checks the hash if you passed `--iso-sha256` |
 | extract | Unpacks the ISO tree and finds the root-filesystem squashfs (pass `--squashfs` if this is ambiguous), then unpacks it. openKylin 3.0's squashfs is about 7.5 GB, and the ISO records its size wrapped at 4 GiB, so extraction cuts it short; the build detects this and copies the full file straight out of the ISO (`scripts/build/recover-squashfs.py`), proving the copy matches what was already extracted |
-| inventory | Lists candidate AI model files with hashes and owning packages, proves the list matches the untouched image, then **stops for review** |
+| inventory | Lists openKylin's AI model files with hashes and owning packages, and proves the list matches the untouched image |
 | payloads | Downloads Ollama from its GitHub release and checks it against the release's `sha256sum.txt`; pulls `qwen2.5-coder:7b-instruct` and the Russian tutor `qwen3:30b-a3b-instruct-2507-q4_K_M`, verifying every blob; fetches Piper, the Russian voices, the course library and the Wiktionary ZIM ([RUSSIAN.md](RUSSIAN.md); skip with `--no-russian`) |
 | customise | Installs LibreOffice, VLC and Fastfetch; builds and installs Kirin's own packages (ani-cli); installs Proton VPN, Pass and Mail from Proton's official packages; adds Discord and Sober as Flatpaks; removes openKylin's AI assistant app. Adds the pinned Ubuntu 26.04 and Debian 13 repositories (each kept only if APT verifies it and it replaces no openKylin package; skip with `--no-extra-repos`); pre-connects Alpaca to Ollama; applies Kirin branding and rebuilds the initramfs with the Kirin splash; applies the language policy and APT pin; installs the base packages; purges the Token Centre and Software Store; installs Warehouse and Flatseal system-wide from Flathub; installs Ollama, its service and the model; installs Kirin Learn; generates `en_GB` and `ru_RU` locales |
-| audit | Runs the AI-payload contract, software, language, accounts, Russian-kit and branding audits |
+| audit | Runs the AI-payload contract, software, language, accounts, Russian-kit, branding, ZFS and OSTree audits |
 | pack | Rebuilds the squashfs with the original compression and replaces it in the upstream ISO. The original BIOS/UEFI boot records are replayed, and `filesystem.size`, `filesystem.manifest` and `md5sum.txt` are updated if present |
 
 ## Safety gates
@@ -68,9 +70,8 @@ Boot it in a disposable VM with UEFI, at least 8 GB of RAM and 64 GB of disk, fi
 
 ## What this build does not do yet
 
-- OpenZFS root, ZFSBootMenu and boot environments: these need their own installer work.
 - The systemd `birthDate` removal from [SYSTEMD-POLICY.md](SYSTEMD-POLICY.md): openKylin's systemd is shipped unchanged.
 - Patching UKUI Control Centre's cloud-account panels: the accounts audit only catches declarative launchers and services.
 - The MX Package Installer port, Synaptic, Web App Studio and the graphical help centre.
-- Kirin branding: the boot menu, installer and volume ID are still openKylin's.
+- Kirin branding of the graphical installer's own screens and log messages, which are still openKylin's.
 - Image signing and Secure Boot changes. The upstream signed boot chain is kept as-is, since the boot files are not modified.

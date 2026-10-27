@@ -76,6 +76,7 @@ json.dump({'metadata': {'title': 'Сказки', 'creator': 'Afanasyev', 'langua
 PY
 printf 'testbook\tA2\ngonebook\tB1\n' > "$T/audiobooks.tsv"
 export KIRIN_TEST_AUDIOBOOKS_TSV="$T/audiobooks.tsv" KIRIN_TEST_ARCHIVE_BASE="file://$SITE/archive/"
+export KIRIN_TEST_MIRROR_JSON="$T/no-mirror.json"   # use the fake sources, not the real mirror
 export KIRIN_TEST_KIWIX_ZIM_BASE="file://$SITE/zim" KIRIN_TEST_MEZHDUNAMI_BASE="file://$SITE/no-such-site/" KIRIN_TEST_YTDLP=true
 # ZFSBootMenu, served locally with its pinned hashes.
 mkdir -p "$SITE/zbm"; printf 'zbm release' > "$SITE/zbm/zbm-release.EFI"; printf 'zbm recovery' > "$SITE/zbm/zbm-recovery.EFI"

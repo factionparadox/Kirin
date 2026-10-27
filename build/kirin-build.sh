@@ -177,6 +177,7 @@ mount_chroot() {
 
   mkdir -p "$ROOTFS/kirin-build"
   install -m 0755 "$HERE/chroot-steps.sh" "$ROOTFS/kirin-build/chroot-steps.sh"
+  install -m 0755 "$REPO/scripts/build/ostree-tree.sh" "$ROOTFS/kirin-build/ostree-tree.sh"
   install -m 0644 "$REPO/packaging/base-packages.txt" "$REPO/packaging/flatpak-apps.txt" \
     "$REPO/packaging/extra-packages.txt" "$REPO/packaging/prefer-ubuntu.txt" "$ROOTFS/kirin-build/"
   [ ! -f "$PAYLOADS/libfyaml-$FYAML_VERSION.tar.gz" ] ||
@@ -605,6 +606,20 @@ audit_zfs() {
   return "$ok"
 }
 
+# The installer's OSTree branch must point at a Kirin commit, not openKylin's.
+audit_ostree() {
+  local repo="$ROOTFS/sysroot/ostree/repo" spec reffile sha
+  if [ ! -f "$repo/config" ]; then echo 'no OSTree repository in this image'; return 0; fi
+  spec=$(sed -n 's/^version=\(.*:.*\)$/\1/p' "$ROOTFS/etc/ostree-release" 2>/dev/null | head -1)
+  reffile="$repo/refs/remotes/${spec%%:*}/${spec#*:}"
+  [ -f "$reffile" ] || { echo "branch $spec missing"; return 1; }
+  sha=$(cat "$reffile")
+  [ -f "$repo/objects/${sha:0:2}/${sha:2}.commit" ] || { echo "commit $sha missing"; return 1; }
+  grep -q "OSTREE: $spec -> $sha" "$AUDIT/ostree-build.log" 2>/dev/null ||
+    { echo "branch $spec does not point at the Kirin commit this build made"; return 1; }
+  echo "installer deploys Kirin commit $sha"
+}
+
 install_russian() {
   [ "$NO_RUSSIAN" -eq 0 ] || return 0
   local r="$PAYLOADS/russian" dest="$ROOTFS$RUSSIAN_DIR"
@@ -826,6 +841,8 @@ apply_kirin_layer() {
 
   in_chroot finish | tee "$AUDIT/finish.log"
   in_chroot manifest > "$WORK/filesystem.manifest"
+  info 'committing Kirin into the OSTree repository that the graphical installer deploys'
+  in_chroot ostree-commit | tee "$AUDIT/ostree-build.log" | sed 's/^/    /'
   restore_chroot
 
   # Packages installed above can bring back translated menu keys and Kylin names.
@@ -869,6 +886,7 @@ stage_audit() {
   run_audit branding python3 "$REPO/scripts/kirin-rebrand.py" --root "$ROOTFS" --audit
   run_audit defaults python3 "$REPO/scripts/kirin-polish.py" --root "$ROOTFS" --audit
   run_audit zfs audit_zfs
+  run_audit ostree audit_ostree
   grep -q '^FAIL ai-payload' "$summary" && die 'AI payload contract failed; this is never waived'
   if [ "$failed" -eq 1 ] && [ "$TEST_BUILD" -ne 1 ]; then
     die 'policy audits failed; fix them, or pass --test-build for an unverified test image'
