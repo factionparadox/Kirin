@@ -31,3 +31,7 @@ Applied by `scripts/kirin-polish.py` and checked by the `defaults` audit.
 | WPS Office | Removed (optional reviewed purge) with its add-on models in `/var/opt/kingsoft`, which `build/model-exclusions.txt` leaves out of the protected inventory. |
 | Terminal | kitty is the default terminal (`x-terminal-emulator`, UKUI/MATE terminal settings, and `xdg-terminal-exec` for "run in terminal" launchers), pinned to the taskbar. `/etc/xdg/kitty/kitty.conf`: 85% opacity with background blur (KWin), padding and Kirin colours; it starts fish. Your login shell stays bash. MATE Terminal is hidden from the menu but kept, since parts of UKUI call it directly. Applied only if kitty installed. |
 | Fastfetch | Runs when an interactive terminal opens (`/etc/bash.bashrc`, and fish's greeting via `/etc/fish/conf.d/kirin.fish`). Turn off in Welcome to Kirin, or `touch ~/.config/kirin/no-fastfetch`. |
+
+## Wallpaper
+
+`packaging/branding/wallpaper/kirin.{jpg,png}` (3840x2560, from `scripts/dev/make-wallpaper.py`) is installed to `/usr/share/backgrounds/kirin/`. `kirin-polish.py` finds every desktop schema setting whose default is a picture (desktop and lock-screen backgrounds) and overrides it with the Kirin wallpaper in `91_kirin-wallpaper.gschema.override`, and points LightDM greeter `background=` settings at it too. The `defaults` audit fails if any picture setting still points elsewhere, or if none was found.

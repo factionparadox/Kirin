@@ -24,6 +24,7 @@ import shutil
 import sys
 
 REPO = Path(__file__).resolve().parents[1]
+BRANDING = REPO / 'packaging/branding'
 TERMINAL_DIR = REPO / 'packaging/terminal'
 
 KIRIN_VERSION = '1.0'
@@ -182,6 +183,62 @@ blacklist cros-usbpd-charger
 '''
 
 
+WALLPAPER_DIR = 'usr/share/backgrounds/kirin'
+WALLPAPER = f'/{WALLPAPER_DIR}/kirin.jpg'
+WALLPAPER_OVERRIDE = 'usr/share/glib-2.0/schemas/91_kirin-wallpaper.gschema.override'
+IMAGE_EXT = ('.jpg', '.jpeg', '.png', '.svg', '.webp', '.bmp')
+WALLPAPER_KEY = re.compile(r'picture|background|wallpaper|bg', re.I)
+
+
+def wallpaper_keys(root: Path) -> list[tuple[str, str, str]]:
+    """(schema id, key, current default) for every string setting whose default is a picture."""
+    import xml.etree.ElementTree as ET
+    found = []
+    for xml in sorted((root / 'usr/share/glib-2.0/schemas').glob('*.gschema.xml')):
+        try:
+            tree = ET.parse(xml)
+        except ET.ParseError:
+            continue
+        for schema in tree.getroot().iter('schema'):
+            for key in schema.iter('key'):
+                default = (key.findtext('default') or '').strip()
+                value = default.strip('\'"')
+                if (key.get('type') == 's' and WALLPAPER_KEY.search(key.get('name', ''))
+                        and value.startswith('/') and value.lower().endswith(IMAGE_EXT)):
+                    found.append((schema.get('id'), key.get('name'), value))
+    return found
+
+
+def apply_wallpaper(root: Path) -> list[str]:
+    dest = root / WALLPAPER_DIR
+    dest.mkdir(parents=True, exist_ok=True)
+    for name in ('kirin.jpg', 'kirin.png'):
+        shutil.copyfile(BRANDING / 'wallpaper' / name, dest / name)
+    keys = wallpaper_keys(root)
+    lines = ['# Kirin: the Kirin wallpaper wherever openKylin set a default picture']
+    seen = set()
+    for schema, key, old in keys:
+        if (schema, key) in seen or not schema:
+            continue
+        seen.add((schema, key))
+        lines += [f'# was {old}', f'[{schema}]', f"{key}='{WALLPAPER}'", '']
+    (root / WALLPAPER_OVERRIDE).parent.mkdir(parents=True, exist_ok=True)
+    (root / WALLPAPER_OVERRIDE).write_text('\n'.join(lines) + '\n', encoding='utf-8')
+    greeters = 0
+    lightdm = root / 'etc/lightdm'
+    for conf in sorted(lightdm.glob('*.conf')) + sorted(lightdm.glob('*.conf.d/*.conf')) if lightdm.is_dir() else []:
+        if conf.is_symlink() or not conf.is_file():
+            continue
+        text = conf.read_text(encoding='utf-8', errors='surrogateescape')
+        new = re.sub(r'^(\s*(?:background|background-image|background-path)\s*=\s*)(/\S+)$',
+                     lambda m: m.group(1) + WALLPAPER if m.group(2).lower().endswith(IMAGE_EXT) else m.group(0),
+                     text, flags=re.M)
+        if new != text:
+            conf.write_text(new, encoding='utf-8', errors='surrogateescape')
+            greeters += 1
+    return [f'wallpaper: {len(seen)} desktop/lock-screen settings and {greeters} login-screen files now use Kirin\'s']
+
+
 ZRAM_CONF = 'etc/systemd/zram-generator.conf'
 ZRAM_SETTINGS = '''# Kirin: compressed swap in RAM, so a large AI model and a browser fit together.
 # Half the RAM (at most 16 GB) of zstd-compressed swap, used before any disk swap.
@@ -217,7 +274,7 @@ def apply(root: Path) -> list[str]:
     modprobe = root / FRAMEWORK_MODPROBE
     modprobe.parent.mkdir(parents=True, exist_ok=True)
     modprobe.write_text(FRAMEWORK_OPTIONS, encoding='utf-8')
-    notes = apply_terminal(root) + apply_zram(root)
+    notes = apply_terminal(root) + apply_zram(root) + apply_wallpaper(root)
     (root / 'etc/kirin-release').write_text(
         f'KIRIN_VERSION="{KIRIN_VERSION}"\nKIRIN_NAME="Kirin Linux"\nKIRIN_BASE="openKylin 3.0"\n', encoding='utf-8')
     (root / 'etc/hostname').write_text(HOSTNAME + '\n', encoding='utf-8')
@@ -273,6 +330,15 @@ def audit(root: Path) -> list[str]:
                     problems.append(f'{rel} still opens files with {old}')
     if not (root / PINS_FILE).is_file():
         problems.append('taskbar pins missing')
+    if not (root / WALLPAPER_DIR / 'kirin.jpg').is_file():
+        problems.append('Kirin wallpaper missing')
+    override = root / WALLPAPER_OVERRIDE
+    if not override.is_file() or '[' not in override.read_text(encoding='utf-8'):
+        problems.append("no default-wallpaper setting found to replace; openKylin's wallpaper may still show")
+    for schema, key, old in wallpaper_keys(root):
+        override = root / WALLPAPER_OVERRIDE
+        if not override.is_file() or f'[{schema}]\n{key}=' not in override.read_text(encoding='utf-8'):
+            problems.append(f'wallpaper setting {schema} {key} still points at {old}')
     if not (root / FRAMEWORK_MODPROBE).is_file():
         problems.append('Framework module options missing')
     if installed(root, 'kitty.desktop'):

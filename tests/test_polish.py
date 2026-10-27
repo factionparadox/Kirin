@@ -32,6 +32,10 @@ class TestPolish(unittest.TestCase):
         flat.mkdir(parents=True)
         (flat / 'com.jeffser.Alpaca.desktop').write_text('[Desktop Entry]\n')
         (apps / 'ukui-mimeapps.list').write_text(MIME)
+        schemas = self.root / 'usr/share/glib-2.0/schemas'; schemas.mkdir(parents=True)
+        (schemas / 'org.ukui.background.gschema.xml').write_text(
+            '<schemalist><schema id="org.ukui.background"><key name="picture-filename" type="s">'
+            "<default>'/usr/share/backgrounds/default.jpg'</default></key></schema></schemalist>")
         (apps / 'mimeapps.list').write_text('[Default Applications]\ntext/csv=wps-office-et.desktop\n'
                                             'application/msword=wps-office-wps.desktop\n[Added Associations]\nx=y\n')
         etc = self.root / 'etc'; etc.mkdir()
@@ -97,7 +101,7 @@ class TestPolish(unittest.TestCase):
             (self.root / 'usr/bin').mkdir(parents=True, exist_ok=True)
             (self.root / 'usr/bin/fish').write_text('')
         schemas = self.root / 'usr/share/glib-2.0/schemas'
-        schemas.mkdir(parents=True)
+        schemas.mkdir(parents=True, exist_ok=True)
         (schemas / 'org.mate.applications.gschema.xml').write_text(
             '<schemalist><schema id="org.mate.applications-terminal" path="/x/"></schema></schemalist>')
 
@@ -150,6 +154,27 @@ class TestPolish(unittest.TestCase):
         quiet('--root', str(self.root), '--apply')
         self.assertIn('zram-size = min(ram / 2, 16384)', (self.root / polish.ZRAM_CONF).read_text())
         self.assertIn('vm.swappiness = 180', (self.root / polish.ZRAM_SYSCTL).read_text())
+
+    def test_wallpaper_replaces_every_default_picture(self):
+        schemas = self.root / 'usr/share/glib-2.0/schemas'
+        (schemas / 'org.ukui.background.gschema.xml').write_text(
+            '<schemalist><schema id="org.ukui.background" path="/org/ukui/background/">'
+            '<key name="picture-filename" type="s"><default>\'/usr/share/backgrounds/openKylin-default.jpg\'</default></key>'
+            '<key name="picture-options" type="s"><default>\'zoom\'</default></key>'
+            '<key name="primary-color" type="s"><default>\'#000000\'</default></key>'
+            '</schema><schema id="org.ukui.screensaver"><key name="background" type="s">'
+            '<default>"/usr/share/backgrounds/lock.png"</default></key></schema></schemalist>')
+        lightdm = self.root / 'etc/lightdm'; lightdm.mkdir(parents=True, exist_ok=True)
+        (lightdm / 'ukui-greeter.conf').write_text('[Greeter]\nbackground=/usr/share/backgrounds/openKylin-default.jpg\nfont=x\n')
+        self.assertEqual(quiet('--root', str(self.root), '--audit'), 1)
+        quiet('--root', str(self.root), '--apply')
+        override = (self.root / polish.WALLPAPER_OVERRIDE).read_text()
+        self.assertIn("[org.ukui.background]\npicture-filename='/usr/share/backgrounds/kirin/kirin.jpg'", override)
+        self.assertIn("[org.ukui.screensaver]\nbackground='/usr/share/backgrounds/kirin/kirin.jpg'", override)
+        self.assertNotIn('picture-options', override)
+        self.assertIn('background=/usr/share/backgrounds/kirin/kirin.jpg\nfont=x', (lightdm / 'ukui-greeter.conf').read_text())
+        self.assertTrue((self.root / 'usr/share/backgrounds/kirin/kirin.png').is_file())
+        self.assertEqual(quiet('--root', str(self.root), '--audit'), 0)
 
     def test_refuses_live_root(self):
         self.assertEqual(quiet('--root', '/', '--apply'), 2)

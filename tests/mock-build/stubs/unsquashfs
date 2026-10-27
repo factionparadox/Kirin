@@ -22,6 +22,10 @@ if a[0] == '-d':
     (r / 'var/opt/kingsoft/addons').mkdir(parents=True)
     (r / 'var/opt/kingsoft/addons/text_detect.tflite').write_bytes(os.urandom(8192))
     (r / 'etc/bash.bashrc').write_text('# bashrc\n')
+    (r / 'usr/share/glib-2.0/schemas').mkdir(parents=True)
+    (r / 'usr/share/glib-2.0/schemas/org.ukui.background.gschema.xml').write_text(
+        '<schemalist><schema id="org.ukui.background"><key name="picture-filename" type="s">'
+        "<default>'/usr/share/backgrounds/openkylin.jpg'</default></key></schema></schemalist>")
     (r / 'etc/hostname').write_text('localhost.localdomain\n')
     (r / 'usr/share/applications/files.desktop').write_text('[Desktop Entry]\nName=Files\n')
     (r / 'usr/share/applications/kylin-music.desktop').write_text('[Desktop Entry]\nName=Kylin Music\nExec=kylin-music\n')
