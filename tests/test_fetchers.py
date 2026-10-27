@@ -281,10 +281,11 @@ class TestMirror(Server):
         work, content = self.make_payloads()
         mirror_json = self.base / 'mirror.json'
         env = {**os.environ, 'KIRIN_MIRROR_PART_SIZE': '4k', 'KIRIN_MIRROR_JSON': str(mirror_json)}
-        result = subprocess.run(['bash', str(BUILD.parent / 'publish-content.sh'), '--work', str(work), '--dry-run'],
+        result = subprocess.run(['bash', str(BUILD.parent / 'publish-content.sh'), '--work', str(work),
+                                 '--out', str(self.base / 'out'), '--dry-run'],
                                 capture_output=True, text=True, env=env)
         self.assertEqual(result.returncode, 0, result.stderr)
-        for part in (work / 'mirror/content-v1').glob('*.tar.[0-9][0-9]'):
+        for part in (self.base / 'out/content-v1').glob('*.tar.[0-9][0-9]'):
             self.publish_file(part)
         return mirror_json, content
 

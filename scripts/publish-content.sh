@@ -5,7 +5,10 @@
 # Run on the build machine after a build that fetched the content (--content bundled),
 # with the GitHub CLI logged in (gh auth login):
 #
-#   scripts/publish-content.sh [--work DIR] [--release content-v1] [--repo OWNER/NAME] [--dry-run]
+#   scripts/publish-content.sh [--work DIR] [--out DIR] [--release content-v1] [--repo OWNER/NAME] [--dry-run]
+#
+# Run it as yourself (not sudo), so it uses your gh login; packed parts go to --out
+# (default ~/kirin-mirror, about 6 GB) and can be deleted after uploading.
 #
 # Mirrors: the FSI/DLI/Peace Corps course library (US government works, public domain),
 # the LibriVox audiobooks (public domain) and the Piper Russian voices (MIT). It does
@@ -18,12 +21,13 @@ set -Eeuo pipefail
 
 HERE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 REPO=$(cd -- "$HERE/.." && pwd)
-WORK="$REPO/work" RELEASE=content-v1 GH_REPO=factionparadox/Kirin DRY=0
+WORK="$REPO/work" RELEASE=content-v1 GH_REPO=factionparadox/Kirin DRY=0 OUT="$HOME/kirin-mirror"
 PART=${KIRIN_MIRROR_PART_SIZE:-1900M}
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --work) WORK=$2; shift 2 ;;
+    --out) OUT=$2; shift 2 ;;
     --release) RELEASE=$2; shift 2 ;;
     --repo) GH_REPO=$2; shift 2 ;;
     --dry-run) DRY=1; shift ;;
@@ -34,7 +38,7 @@ done
 
 die() { printf 'publish-content: %s\n' "$*" >&2; exit 1; }
 R="$WORK/payloads/russian"
-OUTDIR="$WORK/mirror/$RELEASE"
+OUTDIR="$OUT/$RELEASE"    # in your home: the build's work folder belongs to root
 declare -A SOURCES=([ru-course]="$R/library" [ru-audiobooks]="$R/audiobooks" [ru-voices]="$R/voices")
 
 if [ "$DRY" -eq 0 ]; then
