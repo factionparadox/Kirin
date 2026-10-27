@@ -1,0 +1,52 @@
+{
+ "release": "content-v1",
+ "url": "https://github.com/factionparadox/Kirin/releases/download/content-v1/",
+ "packs": {
+  "ru-audiobooks": {
+   "size": 4622407680,
+   "sha256": "e090a312a1cf6f8000f8a55ed531a3e2032b61e80ac0b75950ceb76a3ce2f11e",
+   "files": 587,
+   "parts": [
+    {
+     "name": "ru-audiobooks.tar.00",
+     "size": 1992294400,
+     "sha256": "9bad698e55615e78d0f385c6ca6a1163b2e772b217c0fff24c4219899013275f"
+    },
+    {
+     "name": "ru-audiobooks.tar.01",
+     "size": 1992294400,
+     "sha256": "ba281327516ceacb3a185ac46d6c5c49cc51ba1b41fba592a8cd9c55c66978d5"
+    },
+    {
+     "name": "ru-audiobooks.tar.02",
+     "size": 637818880,
+     "sha256": "e682bab608bd01875e6c4267902639ae544a60eadbb24ecbed60ada3de9063f0"
+    }
+   ]
+  },
+  "ru-course": {
+   "size": 231772160,
+   "sha256": "b40b8018647d0d494101409ba040dd6ccb28414e052c864729274a79b9ca8f16",
+   "files": 35,
+   "parts": [
+    {
+     "name": "ru-course.tar.00",
+     "size": 231772160,
+     "sha256": "b40b8018647d0d494101409ba040dd6ccb28414e052c864729274a79b9ca8f16"
+    }
+   ]
+  },
+  "ru-voices": {
+   "size": 252835840,
+   "sha256": "601d9fa352bc02eb3fa44668e5a2af07ebd5c6e9aed8688adc7182029504aae1",
+   "files": 8,
+   "parts": [
+    {
+     "name": "ru-voices.tar.00",
+     "size": 252835840,
+     "sha256": "601d9fa352bc02eb3fa44668e5a2af07ebd5c6e9aed8688adc7182029504aae1"
+    }
+   ]
+  }
+ }
+}
