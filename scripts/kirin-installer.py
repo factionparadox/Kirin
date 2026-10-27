@@ -35,12 +35,27 @@ MESSAGES = {
     'kare处理完成': 'KARE applications set up',
     '正在配置系统...': 'Configuring the system...',
     '磁盘挂载完成': 'Disks mounted',
+    '运行remove deb 脚本结束': 'Package removal script finished',
+    '正在拷贝安装日志...': 'Copying the installation logs...',
+    '正在进行系统备份...': 'Backing up the system...',
+    '系统备份完成': 'System backup complete',
+    'k.sh 运行结束': 'k.sh finished',
+    '更新 initramfs': 'Updating the initramfs',
+    '安装光盘源列表包': "Installing the disc's package source list",
+    '设置备份还原分区完成': 'Backup and restore partition set up',
+    '正在卸载文件系统...': 'Unmounting file systems...',
+    '卸载完成': 'Unmounted',
 }
 # Patterns, for paths: 开始处理/opt/kare -> Copying /opt/kare.
 PATTERNS = [
     (re.compile(r'^开始处理(\S+)$'), r'Copying \1'),
     (re.compile(r'^处理(\S+)完成$'), r'Copied \1'),
     (re.compile(r'^处理(/\S+)$'), r'Copied \1'),
+    (re.compile(r'^设置用户 (\S+)$'), r'Setting up user \1'),
+    (re.compile(r'^设置时区为 (\S+)$'), r'Setting the time zone to \1'),
+    (re.compile(r'^设置语言为 (\S+)$'), r'Setting the language to \1'),
+    (re.compile(r'^移除 (\S+)$'), r'Removing \1'),
+    (re.compile(r'^跳过 (\S+)$'), r'Skipping \1'),
 ]
 MSG_LINE = re.compile(r'^(\s*msg\s+)"([^"]*)"(.*)$')
 

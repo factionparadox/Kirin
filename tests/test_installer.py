@@ -24,6 +24,9 @@ msg "正在拷贝基础文件系统..."
         		msg "处理/opt/kare完成"
         		msg "处理/var/kare-shadow"
 msg "某个未知消息"
+msg "设置用户 ${USERNAME}"
+            msg "跳过 $i"
+#    	msg "更新 initramfs"
 echo "ghost镜像在磁盘跟目录"
 '''
 INI = '''[config]
@@ -63,6 +66,9 @@ class TestInstaller(unittest.TestCase):
         self.assertIn('msg "Copied /opt/kare"', text)
         self.assertIn('msg "Copied /var/kare-shadow"', text)
         self.assertIn('echo "ghost镜像在磁盘跟目录"', text)
+        self.assertIn('msg "Setting up user ${USERNAME}"', text)
+        self.assertIn('msg "Skipping $i"', text)
+        self.assertIn('#    	msg "更新 initramfs"', text)   # comments left alone
         self.assertEqual(self.script.stat().st_mode & 0o777, 0o755)
         ini = self.ini.read_text()
         self.assertIn('enable-swapfile=false; 使用 swapfile', ini)
