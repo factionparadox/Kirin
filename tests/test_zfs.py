@@ -144,6 +144,7 @@ class TestInstallerDryRun(Stubs):
                      '+ zfs create -o mountpoint=/home zroot/home',
                      '+ zpool set bootfs=zroot/ROOT/kirin zroot',
                      '+ unsquashfs -f -d /mnt/kirin-target /cdrom/casper/filesystem.squashfs',
+                     "(empty /mnt/kirin-target/sysroot: openKylin's OSTree repository)",
                      'useradd -m -s /bin/bash -c Stephen',
                      '+ cp /usr/share/kirin/zfsbootmenu/VMLINUZ.EFI /mnt/kirin-target/boot/efi/EFI/ZBM/VMLINUZ.EFI',
                      "efibootmgr -c -d /dev/nvme0n1 -p 1 -L Kirin (ZFSBootMenu) -l \\EFI\\ZBM\\VMLINUZ.EFI",

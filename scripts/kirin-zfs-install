@@ -182,6 +182,10 @@ if [ -d "$SOURCE" ]; then
 else
   run unsquashfs -f -d "$MNT" "$SOURCE"
 fi
+# openKylin's image carries its own OSTree repository in /sysroot for its graphical installer.
+# Kirin installs the live system itself, so that copy is dead weight on the disk.
+if [ "$DRY" -eq 1 ]; then echo "+ (empty $MNT/sysroot: openKylin's OSTree repository)"
+else find "$MNT/sysroot" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true; fi
 
 say 'Configuring the installed system'
 run install -d -m 0755 "$MNT/etc/zfs" "$MNT/boot/efi"
