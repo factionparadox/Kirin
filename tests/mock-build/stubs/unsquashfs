@@ -33,6 +33,11 @@ if a[0] == '-d':
     (r / 'usr/lib/os-release').write_text('NAME="openKylin"\nID=openkylin\nVERSION_ID="3.0"\n')
     os.symlink('../usr/lib/os-release', r / 'etc/os-release')
     os.symlink('../run/systemd/resolve/stub-resolv.conf', r / 'etc/resolv.conf')
+    # openKylin's graphical installer: a swap setting and a Chinese fallback message.
+    (r / 'usr/share/kylin-os-installer/scripts/prepare').mkdir(parents=True)
+    (r / 'usr/share/kylin-os-installer/systemsetting.ini').write_text('[setting]\nEnableSwap=true\n')
+    (r / 'usr/share/kylin-os-installer/scripts/prepare/16copy-basic-filesystem').write_text(
+        "case ${LANGUAGES} in\n'en_US')\necho Done\n;;\n*)\necho 完成\n;;\nesac\nmsg \"文件系统拷贝完成\"\n")
     # openKylin's OSTree repository and the kernel its installer deploys.
     (r / 'boot').mkdir(); (r / 'usr/lib/modules/7.0.0-3-generic').mkdir(parents=True)
     (r / 'boot/vmlinuz-7.0.0-3-generic').write_bytes(b'kernel'); (r / 'boot/initrd.img-7.0.0-3-generic').write_bytes(b'initrd')

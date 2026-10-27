@@ -837,6 +837,8 @@ apply_kirin_layer() {
   python3 "$REPO/scripts/kirin-rebrand.py" --root "$ROOTFS" --apply | sed 's/^/    /'
   info 'applying Kirin defaults (version, hostname, default apps, taskbar, Fastfetch)'
   python3 "$REPO/scripts/kirin-polish.py" --root "$ROOTFS" --apply | tee "$AUDIT/defaults-apply.log" | sed 's/^/    /'
+  info "adjusting openKylin's installer (no swap, English messages)"
+  python3 "$REPO/scripts/kirin-installer.py" --root "$ROOTFS" --apply | tee "$AUDIT/installer-apply.log" | sed 's/^/    /'
 
   in_chroot finish | tee "$AUDIT/finish.log"
   in_chroot manifest > "$WORK/filesystem.manifest"
@@ -905,6 +907,7 @@ stage_audit() {
   run_audit defaults python3 "$REPO/scripts/kirin-polish.py" --root "$ROOTFS" --audit
   run_audit zfs audit_zfs
   run_audit ostree audit_ostree
+  run_audit installer python3 "$REPO/scripts/kirin-installer.py" --root "$ROOTFS" --audit
   grep -q '^FAIL ai-payload' "$summary" && die 'AI payload contract failed; this is never waived'
   if [ "$failed" -eq 1 ] && [ "$TEST_BUILD" -ne 1 ]; then
     die 'policy audits failed; fix them, or pass --test-build for an unverified test image'
@@ -1024,8 +1027,7 @@ record = {
     'audits': dict(reversed(l.split()) for l in open(summary) if l.strip()),
     'test_build': test == '1',
     'content': content,
-    'not_yet_implemented': ['systemd birthDate removal', 'MX Package Installer port', 'Web App Studio',
-                            "openKylin's graphical installer installs openKylin's OSTree commit, not Kirin"],
+    'not_yet_implemented': ['systemd birthDate removal', 'MX Package Installer port', 'Web App Studio'],
 }
 json.dump(record, open(out, 'w'), indent=2)
 PY

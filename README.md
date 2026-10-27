@@ -52,7 +52,7 @@ Downloads are verified against published checksums where they exist and pinned o
 1. Write the ISO to a USB 3 stick with Ventoy and boot it (normal mode, not Ventoy's memdisk mode). The live session runs from the stick, so a fast stick makes it far more pleasant.
 2. On a new Framework 13 Pro, set the date and time in the BIOS first: with the factory clock, installers can hang on the boot splash.
 3. Choose an installer:
-   * **Install Kirin Linux**, openKylin's graphical installer, for an ordinary ext4 install. It installs Kirin, not stock openKylin: the build commits Kirin into the OSTree repository the installer deploys from ([Building](docs/BUILDING.md)).
+   * **Install Kirin Linux**, openKylin's graphical installer, for an ordinary ext4 install. It installs Kirin, not stock openKylin: the build commits Kirin into the OSTree repository the installer deploys from ([Building](docs/BUILDING.md)). It makes no swap partition or swap file (Kirin swaps to compressed RAM), and its progress messages are in English.
    * **Install Kirin on ZFS** (`sudo kirin-zfs-install`) for an OpenZFS root with snapshots and rollback. It erases the whole disk you choose, and needs **Secure Boot turned off**. Rehearse first with `sudo kirin-zfs-install --dry-run`. See [ZFS](docs/ZFS.md).
 
 ## First steps after installing

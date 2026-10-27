@@ -134,6 +134,8 @@ PY
 R="$T/work/rootfs"
 [ ! -e "$R/kirin-build" ] && [ ! -e "$R/usr/sbin/policy-rc.d" ] || fail 'build scaffolding left in image'
 [ "$(readlink "$R/etc/resolv.conf")" = ../run/systemd/resolve/stub-resolv.conf ] || fail 'resolv.conf not restored'
+grep -q '^EnableSwap=false' "$R/usr/share/kylin-os-installer/systemsetting.ini" || fail 'installer still makes swap'
+grep -q '完成' "$R/usr/share/kylin-os-installer/scripts/prepare/16copy-basic-filesystem" && fail 'installer messages still Chinese'
 grep -q "^OSTREE: openkylin:.* -> [0-9a-f]\{64\} (was 7abfcb4c" "$T/work/audit/ostree-build.log" || fail "Kirin not committed to the OSTree branch"
 [ "$(cat "$R/sysroot/ostree/repo/refs/remotes/openkylin/openkylin/desktop/v3.0/community/general/all/release/amd64")" != "7abfcb4c$(printf "0%.0s" $(seq 56))" ] || fail "OSTree branch still points at openKylin"
 [ -x "$R/usr/local/bin/ollama" ] && [ -f "$R/etc/systemd/system/ollama.service" ] && [ -x "$R/usr/bin/kirin-learn" ] ||
