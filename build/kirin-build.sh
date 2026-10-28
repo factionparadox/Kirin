@@ -606,6 +606,24 @@ audit_zfs() {
 }
 
 # The installer's OSTree branch must point at a Kirin commit, not openKylin's.
+# Kirin's systemd must not carry the birthDate user-record field (docs/SYSTEMD-POLICY.md).
+# Upstream added it in systemd 261 (June 2026); openKylin's systemd is checked directly.
+audit_systemd() {
+  local ver f hits=()
+  ver=$(awk '/^Package: systemd$/{p=1} p&&/^Version:/{print $2; exit}' "$ROOTFS/var/lib/dpkg/status" 2>/dev/null)
+  [ -n "$ver" ] || { echo 'systemd is not installed in this image'; return 0; }
+  echo "systemd $ver"
+  for f in "$ROOTFS"/usr/lib/systemd/libsystemd-shared-*.so "$ROOTFS"/usr/lib/*/systemd/libsystemd-shared-*.so \
+           "$ROOTFS"/usr/bin/userdbctl "$ROOTFS"/usr/bin/homectl "$ROOTFS"/usr/lib/systemd/systemd-userdbd \
+           "$ROOTFS"/usr/lib/systemd/systemd-homed "$ROOTFS"/usr/lib/systemd/systemd-logind; do
+    [ -f "$f" ] && grep -q birthDate "$f" && hits+=("${f#"$ROOTFS"}")
+  done
+  if [ ${#hits[@]} -gt 0 ]; then
+    printf 'FAIL: birthDate support found in %s\n' "${hits[@]}"; return 1
+  fi
+  echo 'no birthDate field in systemd'
+}
+
 audit_ostree() {
   local repo="$ROOTFS/sysroot/ostree/repo" spec reffile sha
   if [ ! -f "$repo/config" ]; then echo 'no OSTree repository in this image'; return 0; fi
@@ -907,6 +925,7 @@ stage_audit() {
   run_audit defaults python3 "$REPO/scripts/kirin-polish.py" --root "$ROOTFS" --audit
   run_audit zfs audit_zfs
   run_audit ostree audit_ostree
+  run_audit systemd audit_systemd
   run_audit installer python3 "$REPO/scripts/kirin-installer.py" --root "$ROOTFS" --audit
   grep -q '^FAIL ai-payload' "$summary" && die 'AI payload contract failed; this is never waived'
   if [ "$failed" -eq 1 ] && [ "$TEST_BUILD" -ne 1 ]; then

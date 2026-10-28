@@ -8,4 +8,6 @@ Required before release: identify openKylin's actual systemd version and downstr
 
 A downstream rebuild should receive security updates. Holding an old systemd forever is not a replacement for maintenance.
 
-**Status: design requirement only; no patched openKylin binary is built or tested.**
+**Status:** upstream systemd first ships `birthDate` in systemd 261 (June 2026). The `systemd` build audit records the image's systemd version and fails if `birthDate` appears in systemd's shared library, `userdbctl`, `homectl`, `systemd-userdbd`, `systemd-homed` or `systemd-logind`. While openKylin ships an older systemd, Kirin meets this requirement with no patching; if an openKylin update brings systemd 261 or later, the audit fails and the downstream rebuild above becomes necessary. No patched systemd is built yet.
+
+Debian 13 ships systemd 257 (before `birthDate`); Debian 14 is expected to ship a release that has it. A future Debian base would need the same rebuild.
