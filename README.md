@@ -2,7 +2,7 @@
 
 **A private, educational Linux desktop for the Framework Laptop 13 Pro, with local AI and the UKUI desktop.** Kirin teaches you how your computer works and helps you code and learn Russian from the alphabet to B2. It has no accounts, no cloud services and no telemetry, and its AI runs on the laptop itself.
 
-Kirin starts from openKylin 3.0's packages, which provide the UKUI 4.24 desktop and Linux 7.0, and removes the rest of openKylin. Its vendor accounts, cloud services, software store, AI models, Chinese defaults and branding are gone. Kirin adds its own installer, storage, learning tools, applications and hardware support, and audits the result on every build.
+Kirin is UKUI 4.24 on Linux 7.0, with every vendor account, cloud service, store, bundled AI model and Chinese default taken out. It adds its own installer, storage, learning tools, applications and hardware support, and audits the result on every build.
 
 **Status: Kirin Linux 1.0 builds, and every build audit passes.** The ISO is about 12 GB. The AI models and large learning material are downloaded after installing with Kirin Content. The live session runs on real hardware. The graphical installer fixes are new and waiting for their first real install:
 
@@ -14,17 +14,17 @@ The OpenZFS installer has not been tried on hardware yet. See [What's not done y
 
 ## What Kirin changes
 
-Kirin is a remaster, not a fork: it takes the official openKylin 3.0 ISO apart, changes it and puts it back together, so openKylin's security updates keep arriving. Everything below is done by `build/kirin-build.sh` and checked by an audit that fails the build if it comes undone.
+Kirin is a remaster, not a fork: it takes its base system's ISO apart, changes it and puts it back together, so the base's security updates keep arriving. Everything below is done by `build/kirin-build.sh` and checked by an audit that fails the build if it comes undone.
 
 | Area | What Kirin does |
 | --- | --- |
-| Accounts and cloud | Kylin ID, the token centre, cloud sync and device registration removed; local accounts only ([Accounts](docs/ACCOUNTS.md)) |
-| AI | openKylin's AI assistant and every AI model it shipped removed (the build proves none is left); Ollama with models you choose instead |
-| Software | openKylin's Software Store replaced by Flatpak with Warehouse and Flatseal; Ubuntu 26.04 and Debian 13 added below openKylin for packages it lacks, never replacing its own ([Software](docs/SOFTWARE.md)) |
+| Accounts and cloud | Vendor ID, token centre, cloud sync and device registration removed; local accounts only ([Accounts](docs/ACCOUNTS.md)) |
+| AI | The bundled AI assistant and every AI model shipped with it removed (the build proves none is left); Ollama with models you choose instead |
+| Software | The vendor software store replaced by Flatpak with Warehouse and Flatseal; Ubuntu 26.04 and Debian 13 added at lower priority for missing packages, never replacing the base's own ([Software](docs/SOFTWARE.md)) |
 | Language | British English by default, Russian supported; Chinese language packs, menu translations and the Chinese boot locale removed ([Languages](docs/LANGUAGES.md)) |
-| Branding | Kirin Linux everywhere you look: boot menu and splash, OS name, menus, wallpaper, and inside openKylin's installer (its background, logo, slides and licence) ([Branding](docs/BRANDING.md)) |
-| Installer | openKylin's graphical installer installs Kirin: the build commits Kirin into the OSTree repository it deploys from. No swap partition (Kirin swaps to compressed RAM), no 16-100 GB backup partition, English messages. Plus Kirin's own OpenZFS installer |
-| systemd | openKylin 3.0's systemd 259 predates the `birthDate` user-record field (added in 261); an audit fails the build if an update ever brings it in ([Systemd policy](docs/SYSTEMD-POLICY.md)) |
+| Branding | Kirin Linux everywhere you look: boot menu and splash, OS name, menus, wallpaper, and inside the graphical installer (its background, logo, slides and licence) ([Branding](docs/BRANDING.md)) |
+| Installer | The graphical installer installs Kirin: the build commits Kirin into the OSTree repository it deploys from. No swap partition (Kirin swaps to compressed RAM), no 16-100 GB backup partition, English messages. Plus Kirin's own OpenZFS installer |
+| systemd | systemd 259, which predates the `birthDate` user-record field (added in 261); an audit fails the build if an update ever brings it in ([Systemd policy](docs/SYSTEMD-POLICY.md)) |
 | Hardware | Newer Intel microcode, thermald and Wi-Fi regulatory data from Ubuntu 26.04, fingerprint login, firmware updates and Framework tools ([Hardware](docs/HARDWARE.md)) |
 
 ## What you get
@@ -43,10 +43,10 @@ Kirin is a remaster, not a fork: it takes the official openKylin 3.0 ISO apart, 
 
 ## Building the ISO
 
-You need an x86-64 Linux machine (WSL2 works) with root, internet access, about 70 GB free while building (200 GB with `--content bundled`), and the official `openKylin-Desktop-V3.0-20260918-x86_64.iso`.
+You need an x86-64 Linux machine (WSL2 works) with root, internet access, about 70 GB free while building (200 GB with `--content bundled`), and the base ISO named in [Building the ISO](docs/BUILDING.md).
 
 ~~~sh
-sudo build/kirin-build.sh --iso openKylin-Desktop-V3.0-20260918-x86_64.iso
+sudo build/kirin-build.sh --iso BASE.iso
 ~~~
 
 The output is `out/kirin-YYYYMMDD-amd64.iso` with its `.sha256` and a `.build.json` record. Write it to a USB 3 stick with [Ventoy](https://www.ventoy.net/) or a raw writer.
@@ -119,7 +119,7 @@ Kirin covers the courses, words, listening, reading and practice with an AI. It 
 | Graphical APT manager (MX Package Installer port) | APT, Warehouse and Flatseal work today |
 | Web App Studio | Launchers for web apps with isolated browser profiles |
 | Test of the graphical installer fixes | Kirin commit, no swap or backup partition, branding: awaiting the first real install |
-| Patched systemd, if openKylin ever moves to 261+ | Not needed with systemd 259; the `systemd` audit says when it is ([Systemd policy](docs/SYSTEMD-POLICY.md)) |
+| Patched systemd, if the base ever moves to 261+ | Not needed with systemd 259; the `systemd` audit says when it is ([Systemd policy](docs/SYSTEMD-POLICY.md)) |
 | Debian base | A possible future rebase once Debian 14 ships UKUI 4.20 or newer; almost all of Kirin would carry over |
 | Signed Kirin APT repository live | The pipeline exists; it needs its signing key ([Kirin repo](docs/KIRIN-REPO.md)) |
 | Full UKUI translation check | Automated audits pass; menus still need a human read-through in English and Russian |
