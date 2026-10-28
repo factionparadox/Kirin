@@ -1,26 +1,45 @@
 # Kirin Linux
 
-**An educational Linux desktop with local AI, built on openKylin 3.0.** Kirin teaches you how your computer works, helps you code and learn Russian without an internet connection or an account, and runs well on the Framework Laptop 13 Pro.
+**A private, educational Linux desktop for the Framework Laptop 13 Pro, with local AI and the UKUI desktop.** Kirin teaches you how your computer works and helps you code and learn Russian from the alphabet to B2. It has no accounts, no cloud services and no telemetry, and its AI runs on the laptop itself.
 
-**Status: Kirin Linux 1.0 builds.** `build/kirin-build.sh` turns the official openKylin 3.0 ISO into a bootable Kirin ISO, and every build audit passes. The AI models and big Russian material are now downloaded after installing, which makes the ISO far smaller than the 56 GB it used to be. Testing on real hardware is under way. The OpenZFS root installer is new and not yet tested on hardware; Web App Studio and a graphical APT manager are still plans; see [What's not done yet](#whats-not-done-yet).
+Kirin starts from openKylin 3.0's packages, which provide the UKUI 4.24 desktop and Linux 7.0, and removes the rest of openKylin. Its vendor accounts, cloud services, software store, AI models, Chinese defaults and branding are gone. Kirin adds its own installer, storage, learning tools, applications and hardware support, and audits the result on every build.
+
+**Status: Kirin Linux 1.0 builds, and every build audit passes.** The ISO is about 12 GB. The AI models and large learning material are downloaded after installing with Kirin Content. The live session runs on real hardware. The graphical installer fixes are new and waiting for their first real install:
+
+* it now installs Kirin's own system;
+* no swap or backup partition;
+* Kirin branding throughout.
+
+The OpenZFS installer has not been tried on hardware yet. See [What's not done yet](#whats-not-done-yet).
+
+## What Kirin changes
+
+Kirin is a remaster, not a fork: it takes the official openKylin 3.0 ISO apart, changes it and puts it back together, so openKylin's security updates keep arriving. Everything below is done by `build/kirin-build.sh` and checked by an audit that fails the build if it comes undone.
+
+| Area | What Kirin does |
+| --- | --- |
+| Accounts and cloud | Kylin ID, the token centre, cloud sync and device registration removed; local accounts only ([Accounts](docs/ACCOUNTS.md)) |
+| AI | openKylin's AI assistant and every AI model it shipped removed (the build proves none is left); Ollama with models you choose instead |
+| Software | openKylin's Software Store replaced by Flatpak with Warehouse and Flatseal; Ubuntu 26.04 and Debian 13 added below openKylin for packages it lacks, never replacing its own ([Software](docs/SOFTWARE.md)) |
+| Language | British English by default, Russian supported; Chinese language packs, menu translations and the Chinese boot locale removed ([Languages](docs/LANGUAGES.md)) |
+| Branding | Kirin Linux everywhere you look: boot menu and splash, OS name, menus, wallpaper, and inside openKylin's installer (its background, logo, slides and licence) ([Branding](docs/BRANDING.md)) |
+| Installer | openKylin's graphical installer installs Kirin: the build commits Kirin into the OSTree repository it deploys from. No swap partition (Kirin swaps to compressed RAM), no 16-100 GB backup partition, English messages. Plus Kirin's own OpenZFS installer |
+| systemd | openKylin 3.0's systemd 259 predates the `birthDate` user-record field (added in 261); an audit fails the build if an update ever brings it in ([Systemd policy](docs/SYSTEMD-POLICY.md)) |
+| Hardware | Newer Intel microcode, thermald and Wi-Fi regulatory data from Ubuntu 26.04, fingerprint login, firmware updates and Framework tools ([Hardware](docs/HARDWARE.md)) |
 
 ## What you get
 
 | | Kirin |
 | --- | --- |
-| Base | openKylin 3.0 (Huanghe), UKUI 4.24 desktop, Linux 7.0, x86-64 |
-| Look and feel | Kirin Linux 1.0 branding: boot splash, boot menu, OS name, icons and menu names ([Branding](docs/BRANDING.md)); Welcome to Kirin on first login; kitty terminal (translucent, blurred) running fish, with Fastfetch |
-| Language | British English by default, Russian supported; Chinese language packs and menu translations removed ([Languages](docs/LANGUAGES.md)) |
-| Accounts | Local accounts only: no Kylin ID, token centre, cloud sync or device registration ([Accounts](docs/ACCOUNTS.md)) |
-| Applications | LibreOffice (English and Russian), VLC, mpv, Proton VPN, Pass and Mail (official packages), Discord, Sober, ani-cli; WPS Office removed |
-| Software | APT for the system, with Ubuntu 26.04 and Debian 13 added below openKylin for packages it lacks (never replacing its own); Flatpak with Warehouse and Flatseal instead of openKylin's Software Store ([Software](docs/SOFTWARE.md)) |
-| Local AI | Ollama with Qwen2.5-Coder 7B (coding) and Qwen3 30B (Russian tutor), chat in Alpaca; openKylin's own AI models and assistant removed. Models download once with Kirin Content; after that everything runs offline and nothing leaves the computer. Tuned for a laptop: a model stays loaded between questions and only one is in memory at a time |
+| Desktop | UKUI 4.24 on Linux 7.0 (x86-64), Kirin branding, Welcome to Kirin on first login, kitty terminal (translucent, blurred) running fish with Fastfetch |
+| Applications | LibreOffice (English and Russian), VLC, mpv, Proton VPN, Pass and Mail (official packages), Discord, Sober, ani-cli |
+| Local AI | Ollama with Qwen2.5-Coder 7B (coding) and Qwen3 30B (Russian tutor), chat in Alpaca. Models download once with Kirin Content; after that everything runs offline and nothing leaves the computer. Tuned for a laptop: a model stays loaded between questions and only one is in memory at a time |
 | Learning | Kirin Learn: offline Linux lessons, safe command explanations, Vim and Neovim tutors ([Education](docs/EDUCATION.md)) |
 | Russian, A1 to B2 | The *Между нами* textbook with audio, FSI, DLI and Peace Corps courses, a 10,000-word spaced-repetition drill, 29 LibriVox audiobooks, Russian Wikisource, Wikipedia and Wiktionary, Piper voices and the AI tutor, with a study plan from the alphabet to B2 ([Russian learning kit](docs/RUSSIAN.md), [learning Russian with Kirin](#learning-russian-with-kirin)) |
-| Hardware | Tuned for the Framework Laptop 13 Pro (Intel Core Ultra Series 3): fingerprint login with fprintd, GPU video decoding, current Intel microcode and thermald from Ubuntu 26.04, power profiles, firmware updates with fwupd, `framework_tool`, zram swap ([Hardware](docs/HARDWARE.md)) |
-| OpenZFS root | Optional installer with an OpenZFS root (encryption optional), separate `/home`, ZFSBootMenu, a snapshot before every APT change and `kirin-be` boot environments for rollback; the normal openKylin installer stays available ([ZFS](docs/ZFS.md)) |
+| Hardware | Tuned for the Framework Laptop 13 Pro (Intel Core Ultra Series 3): fingerprint login with fprintd, GPU video decoding, power profiles, firmware updates with fwupd, `framework_tool`, zram swap ([Hardware](docs/HARDWARE.md)) |
+| OpenZFS root | Optional installer with an OpenZFS root (encryption optional), separate `/home`, ZFSBootMenu, a snapshot before every APT change and `kirin-be` boot environments for rollback ([ZFS](docs/ZFS.md)) |
 | Downloads | **Kirin Content** fetches the AI models, course library, dictionaries, reading and audiobooks after installing, checking every file; openly licensed packs also come from Kirin's own GitHub mirror, so they cannot vanish ([Content](docs/CONTENT.md)) |
-| Kirin packages | Built from pinned upstream sources and published as a signed APT repository ([Kirin repo](docs/KIRIN-REPO.md)) |
+| Kirin packages | Built from pinned upstream sources; a signed APT repository is ready to publish once it has its key ([Kirin repo](docs/KIRIN-REPO.md)) |
 
 ## Building the ISO
 
@@ -52,7 +71,7 @@ Downloads are verified against published checksums where they exist and pinned o
 1. Write the ISO to a USB 3 stick with Ventoy and boot it (normal mode, not Ventoy's memdisk mode). The live session runs from the stick, so a fast stick makes it far more pleasant.
 2. On a new Framework 13 Pro, set the date and time in the BIOS first: with the factory clock, installers can hang on the boot splash.
 3. Choose an installer:
-   * **Install Kirin Linux**, openKylin's graphical installer, for an ordinary ext4 install. It installs Kirin, not stock openKylin: the build commits Kirin into the OSTree repository the installer deploys from ([Building](docs/BUILDING.md)). It makes no swap partition or swap file (Kirin swaps to compressed RAM) and no openKylin backup partition, so the disk is just EFI, `/boot`, the system and your data; its progress messages are in English.
+   * **Install Kirin Linux**, the graphical installer, for an ordinary ext4 install. The disk becomes EFI, `/boot`, the system (60% of the disk, up to 100 GB) and your data: no swap partition and no backup partition.
    * **Install Kirin on ZFS** (`sudo kirin-zfs-install`) for an OpenZFS root with snapshots and rollback. It erases the whole disk you choose, and needs **Secure Boot turned off**. Rehearse first with `sudo kirin-zfs-install --dry-run`. See [ZFS](docs/ZFS.md).
 
 ## First steps after installing
@@ -99,7 +118,9 @@ Kirin covers the courses, words, listening, reading and practice with an AI. It 
 | Hardware test of the ZFS installer | Rehearse with `sudo kirin-zfs-install --dry-run`; Secure Boot must be off |
 | Graphical APT manager (MX Package Installer port) | APT, Warehouse and Flatseal work today |
 | Web App Studio | Launchers for web apps with isolated browser profiles |
-| Removing systemd's `birthDate` user field | [Systemd policy](docs/SYSTEMD-POLICY.md) |
+| Test of the graphical installer fixes | Kirin commit, no swap or backup partition, branding: awaiting the first real install |
+| Patched systemd, if openKylin ever moves to 261+ | Not needed with systemd 259; the `systemd` audit says when it is ([Systemd policy](docs/SYSTEMD-POLICY.md)) |
+| Debian base | A possible future rebase once Debian 14 ships UKUI 4.20 or newer; almost all of Kirin would carry over |
 | Signed Kirin APT repository live | The pipeline exists; it needs its signing key ([Kirin repo](docs/KIRIN-REPO.md)) |
 | Full UKUI translation check | Automated audits pass; menus still need a human read-through in English and Russian |
 
