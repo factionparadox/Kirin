@@ -12,6 +12,12 @@ image root. Never runs on /.
   restore tool, which Kirin does not ship. Its scripts already have a layout without
   it, used in virtual machines ("虚拟机去掉备份还原分区"); Kirin uses that layout on
   every machine. The flag only chooses the partition layout.
+* Kirin branding inside the installer programs (packaging/branding/installer/
+  installer.json): the background, the logo on the language page, the slide with
+  openKylin's Chinese-labelled desktop picture, the slide captions, the error
+  message naming KylinOS, and openKylin's privacy statement become Kirin's. The
+  images and text are compiled into the programs as Qt resources and strings;
+  scripts/build/qtres.py rewrites them in place, each within its old space.
 * English progress messages: the installer's scripts pick a message with
   `case ${LANGUAGES}`, and anything not listed (Kirin's en_GB) falls through to
   Chinese. The fallback branch now says what the en_US branch says. Hard-coded
@@ -20,11 +26,15 @@ image root. Never runs on /.
 from __future__ import annotations
 
 import argparse
+import importlib.util
+import json
 import os
 from pathlib import Path
 import re
 import sys
 
+REPO = Path(__file__).resolve().parents[1]
+BRANDING = REPO / 'packaging/branding/installer'
 INSTALLER = 'usr/share/kylin-os-installer'
 SCRIPTS = f'{INSTALLER}/scripts'
 CJK = re.compile(r'[一-鿿]')
@@ -179,6 +189,89 @@ def write(p: Path, text: str) -> None:
     os.chmod(p, mode)
 
 
+def qtres():
+    if 'kirin_qtres' not in sys.modules:
+        spec = importlib.util.spec_from_file_location('kirin_qtres', REPO / 'scripts/build/qtres.py')
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules['kirin_qtres'] = mod          # dataclasses need the module registered
+        spec.loader.exec_module(mod)
+    return sys.modules['kirin_qtres']
+
+
+def branding_spec() -> dict:
+    path = BRANDING / 'installer.json'
+    return json.loads(path.read_text()) if path.is_file() else {'resources': {}, 'strings': {}}
+
+
+def _string_state(buf, old: str, new: str):
+    """Offset of old (NUL-terminated, after a NUL) to patch, or 'done', or None."""
+    o, n = old.encode(), new.encode()
+    if len(n) > len(o):
+        raise ValueError(f'replacement longer than original: {new!r}')
+    i = buf.find(o + b'\0')
+    if i > 0 and buf[i - 1] == 0 and buf.find(o + b'\0', i + 1) < 0:
+        return i
+    j = buf.find(n + b'\0')
+    if i < 0 and j > 0 and buf[j - 1] == 0:
+        return 'done'
+    return None
+
+
+def branding(root: Path, fix: bool, spec: dict | None = None) -> list[str]:
+    """Apply (fix=True) or check the branding patches; returns notes or problems."""
+    spec = spec or branding_spec()
+    q, out = qtres(), []
+    for rel in sorted(set(spec['resources']) | set(spec['strings'])):
+        path = root / rel
+        if not path.is_file() or path.is_symlink():
+            out.append(f'/{rel}: missing'); continue
+        buf = bytearray(path.read_bytes())
+        found = {r.path: r for r in q.resources(buf)}
+        changed = False
+        for rpath, src in spec['resources'].get(rel, {}).items():
+            r = found.get(rpath)
+            if r is None:
+                out.append(f'/{rel}: no resource {rpath}'); continue
+            if src.startswith('resource:'):
+                origin = found.get(src[len('resource:'):])
+                if origin is None:
+                    out.append(f'/{rel}: no resource {src}'); continue
+                new = q.content(buf, origin)
+            else:
+                new = (BRANDING / src).read_bytes()
+            if q.content(buf, r) == new:
+                continue
+            if not fix:
+                out.append(f'/{rel}: {rpath} is still openKylin\'s'); continue
+            try:
+                q.replace(buf, r, new)
+            except ValueError as exc:
+                out.append(f'WARNING: /{rel}: {exc}'); continue
+            changed = True
+            out.append(f'branding: /{rel} {rpath}')
+        for old, new in spec['strings'].get(rel, []):
+            state = _string_state(buf, old, new)
+            if state == 'done':
+                continue
+            if state is None:
+                out.append(f'/{rel}: text not found: {old[:50]}...'); continue
+            if not fix:
+                out.append(f'/{rel}: still says {old[:50]}...'); continue
+            o, n = old.encode(), new.encode()
+            buf[state:state + len(o)] = n + bytes(len(o) - len(n))
+            changed = True
+            out.append(f'branding: /{rel} "{new.split(" @ ")[0]}"')
+        if changed:
+            write_bytes(path, bytes(buf))
+    return out
+
+
+def write_bytes(p: Path, data: bytes) -> None:
+    mode = p.stat().st_mode
+    p.write_bytes(data)
+    os.chmod(p, mode)
+
+
 def apply(root: Path) -> list[str]:
     root = image_root(root)
     notes = []
@@ -193,6 +286,7 @@ def apply(root: Path) -> list[str]:
             write(p, new); notes.append(f'partition layout: /{rel}')
         elif state == 'missing':
             notes.append(f'WARNING: /{rel} has changed upstream; partition layout not changed there')
+    notes += [n if n.startswith(('branding', 'WARNING')) else f'WARNING: {n}' for n in branding(root, fix=True)]
     changed, left = 0, []
     for p in scripts(root):
         text = read_script(p)
@@ -222,6 +316,7 @@ def audit(root: Path) -> list[str]:
         state = swap_edit(p.read_text(), pattern, repl, marker)[1]
         if state != 'done':
             problems.append(f'/{rel}: still openKylin\'s layout' if state == 'applied' else f'/{rel}: changed upstream, layout edit does not fit')
+    problems += branding(root, fix=False)
     for p in scripts(root):
         text = read_script(p)
         if text is None:

@@ -1,11 +1,15 @@
 """scripts/kirin-installer.py: no swap, English installer messages."""
 import importlib.util
+import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 spec = importlib.util.spec_from_file_location('kinst', Path(__file__).resolve().parents[1] / 'scripts/kirin-installer.py')
 ki = importlib.util.module_from_spec(spec); spec.loader.exec_module(ki)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from rccfixture import fake_installer_programs  # noqa: E402
 
 SCRIPT = '''#!/bin/bash
 case ${LANGUAGES} in
@@ -82,6 +86,7 @@ class TestInstaller(unittest.TestCase):
                           (f'{ki.SCRIPTS}/prepare/18setup-swapfile', SWAPFILE), (f'{ki.SCRIPTS}/utils', UTILS), (f'{ki.SCRIPTS}/in_chroot/genfstab', GENFSTAB)]:
             f = self.root / rel; f.parent.mkdir(parents=True, exist_ok=True); f.write_text(text)
             self.files[rel] = f
+        fake_installer_programs(self.root, ki.branding_spec(), ki.BRANDING)
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -121,12 +126,37 @@ class TestInstaller(unittest.TestCase):
         fstab = self.files[f'{ki.SCRIPTS}/in_chroot/genfstab'].read_text()
         self.assertIn("continue\n    [[ $device = /dev/zram* ]] && continue   # Kirin", fstab)
 
+    def test_branding_in_the_programs(self):
+        q, spec = ki.qtres(), ki.branding_spec()
+        self.assertTrue(any('still openKylin' in p for p in ki.audit(self.root)))
+        ki.apply(self.root)
+        for rel, res in spec['resources'].items():
+            buf = (self.root / rel).read_bytes()
+            found = {r.path: r for r in q.resources(buf)}
+            for rpath, src in res.items():
+                want = (q.content(buf, found[src[9:]]) if src.startswith('resource:')
+                        else (ki.BRANDING / src).read_bytes())
+                self.assertEqual(q.content(buf, found[rpath]), want, rpath)
+        prog = (self.root / 'usr/bin/kylin-os-installer').read_bytes()
+        self.assertNotIn(b'KylinOS', prog)
+        self.assertIn(b'Private, local AI @ ', prog)
+        self.assertIn(b'unrelated text\0', prog)
+        self.assertEqual((self.root / 'usr/bin/kylin-os-installer').stat().st_mode & 0o777, 0o755)
+
+    def test_captions_fit_and_licence_is_kirins(self):
+        spec = ki.branding_spec()
+        for old, new in spec['strings']['usr/bin/kylin-os-installer']:
+            self.assertLessEqual(len(new.encode()), len(old.encode()), new)
+            self.assertEqual(' @ ' in old, ' @ ' in new, new)
+        self.assertIn('Kirin Linux', (ki.BRANDING / 'licence.txt').read_text())
+
     def test_apply_is_idempotent(self):
         ki.apply(self.root)
-        first = [f.read_text() for f in [self.script, *self.files.values()]]
+        progs = [self.root / r for r in ki.branding_spec()['resources']]
+        first = [f.read_text() for f in [self.script, *self.files.values()]] + [p.read_bytes() for p in progs]
         notes = ki.apply(self.root)
-        self.assertFalse([n for n in notes if n.startswith('partition layout')], notes)
-        self.assertEqual(first, [f.read_text() for f in [self.script, *self.files.values()]])
+        self.assertFalse([n for n in notes if n.startswith(('partition layout', 'branding', 'WARNING'))], notes)
+        self.assertEqual(first, [f.read_text() for f in [self.script, *self.files.values()]] + [p.read_bytes() for p in progs])
 
     def test_changed_upstream_is_reported(self):
         f = self.files[f'{ki.SCRIPTS}/autopart-efi.sh']

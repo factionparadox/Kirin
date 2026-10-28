@@ -19,7 +19,7 @@ def lerp(a, b, t):
     return tuple(round(x + (y - x) * t) for x, y in zip(a, b))
 
 
-def main():
+def render(W=W, H=H, logo_mark=True, glow_at=(0.73, 0.62)):
     rng = random.Random(1)                           # reproducible
     img = Image.new('RGB', (W, H))
     draw = ImageDraw.Draw(img)
@@ -41,10 +41,12 @@ def main():
     # Soft blue glow where the logo stands.
     glow = Image.new('L', (W, H), 0)
     gd = ImageDraw.Draw(glow)
-    cx, cy, r = int(W * 0.73), int(H * 0.62), int(H * 0.42)
+    cx, cy, r = int(W * glow_at[0]), int(H * glow_at[1]), int(H * 0.42)
     gd.ellipse((cx - r, cy - r, cx + r, cy + r), fill=70)
     glow = glow.filter(ImageFilter.GaussianBlur(r // 2))
     img = Image.composite(Image.new('RGB', (W, H), (29, 111, 184)), img, glow)
+    if not logo_mark:
+        return img
     # The logo, slightly translucent so it sits in the scene.
     logo = Image.open(REPO / 'packaging/branding/kirin-logo.png').convert('RGBA')
     size = int(H * 0.46)
@@ -54,6 +56,11 @@ def main():
     alpha = alpha.point(lambda v: int(v * 0.92))
     logo.putalpha(alpha)
     img.paste(logo, (cx - size // 2, cy - size // 2), logo)
+    return img
+
+
+def main():
+    img = render()
     out = REPO / 'packaging/branding/wallpaper'
     out.mkdir(parents=True, exist_ok=True)
     img.save(out / 'kirin.png', optimize=True)

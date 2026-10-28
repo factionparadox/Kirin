@@ -1,0 +1,13 @@
+Kirin Linux 1.0: licences and privacy
+
+Kirin Linux is free software. It is built from openKylin 3.0, UKUI and thousands of other open-source programs, plus Kirin's own tools (GNU GPL version 3). Every program keeps its own licence, most of them the GNU GPL or another free-software licence: you may use, study, share and change them under those terms. Each package's licence is installed in /usr/share/doc.
+
+Kirin Linux comes with no warranty, to the extent the law allows.
+
+Privacy
+
+* Kirin has no account, licence activation or device registration, and collects nothing about you.
+* The local AI runs on this computer. Your questions, code and files stay on it.
+* Like any Linux system, it goes online for software updates (openKylin's, Ubuntu's and Debian's package servers, and Flathub) and to set the clock. Kirin Content downloads only what you choose, from the sources it lists. Those servers see your IP address, as any website does.
+
+Kirin's source code and build scripts: https://github.com/factionparadox/Kirin

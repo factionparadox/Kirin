@@ -137,6 +137,8 @@ R="$T/work/rootfs"
 grep -qx 'enable-swapfile=true' "$R/usr/share/kylin-os-installer/ky-installer.cfg" &&
   grep -q '^swap=0 ' "$R/usr/share/kylin-os-installer/scripts/autopart-efi.sh" || fail 'installer still makes swap'
 grep -q '完成' "$R/usr/share/kylin-os-installer/scripts/prepare/16copy-basic-filesystem" && fail 'installer messages still Chinese'
+grep -q 'Private, local AI @ ' "$R/usr/bin/kylin-os-installer" && ! grep -q KylinOS "$R/usr/bin/kylin-os-installer" ||
+  fail 'installer program still has openKylin branding'
 grep -q "^OSTREE: openkylin:.* -> [0-9a-f]\{64\} (was 7abfcb4c" "$T/work/audit/ostree-build.log" || fail "Kirin not committed to the OSTree branch"
 [ "$(cat "$R/sysroot/ostree/repo/refs/remotes/openkylin/openkylin/desktop/v3.0/community/general/all/release/amd64")" != "7abfcb4c$(printf "0%.0s" $(seq 56))" ] || fail "OSTree branch still points at openKylin"
 [ -x "$R/usr/local/bin/ollama" ] && [ -f "$R/etc/systemd/system/ollama.service" ] && [ -x "$R/usr/bin/kirin-learn" ] ||

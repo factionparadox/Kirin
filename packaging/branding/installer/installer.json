@@ -1,0 +1,49 @@
+{
+ "resources": {
+  "usr/bin/kylin-os-installer": {
+   ":/data/png/openkylin-bk.jpg": "background.jpg",
+   ":/data/png/slidershow/openkylin-slideshow/4.png": "resource::/data/png/slidershow/4.png"
+  },
+  "usr/lib/libKChoiceLanguage.so.1.0.0": {
+   ":/res/png/Kylin_logo.png": "logo.png",
+   ":/res/png/Kylin_logo@2x.png": "logo@2x.png"
+  },
+  "usr/lib/libKyLicense.so.1.0.0": {
+   ":/res/file/EULA-new": "licence.txt",
+   ":/res/file/EULAE-new": "licence.txt",
+   ":/res/file/EULAHK-new": "licence.txt"
+  }
+ },
+ "strings": {
+  "usr/bin/kylin-os-installer": [
+   [
+    "Mainstream hardware platforms @ Supports x86, ARM, RISC‑V, LoongArch and other hardware platforms.",
+    "Made for the Framework 13 Pro @ Fingerprint login, video decoding, power profiles, firmware updates."
+   ],
+   [
+    "Innovative foundation base @ Linux 7.0‑kernel‑based; over 180 base libraries upgraded for state‑of‑the‑art technologies.",
+    "Linux 7.0 and UKUI 4.24 @ A current kernel and desktop, with Ubuntu 26.04 and Debian 13 packages for anything missing."
+   ],
+   [
+    "Comprehensive intelligent system evolution @ Integrated with KART AI subsystem, KylinBot Agent and new AI Assistant for boosted intelligence.",
+    "Private, local AI @ A coding helper and a Russian tutor that run on this computer, offline, sending nothing anywhere."
+   ],
+   [
+    "Brand‑new desktop experience upgrade @ UKUI 4.24 optimized with air gestures and screen reader for efficient desktop interaction.",
+    "Learn as you go @ Kirin Learn explains Linux and its commands, and teaches Russian from the alphabet to B2."
+   ],
+   [
+    "Proactive Quantum‑Security preparation @ Post‑quantum cryptography support, pre‑emptive preparation for quantum‑era encryption.",
+    "Your computer, your account @ Local accounts only: no cloud sign-in, no tracking, no device registration."
+   ],
+   [
+    "Rust‑enabled core tools transition @ First‑wave system tools refactored in Rust, reducing memory‑safety risks for better stability & reliability.",
+    "Your software, your choice @ APT for the system, Flatpak with Warehouse and Flatseal for apps, and Kirin Content for AI models and courses."
+   ],
+   [
+    "Sorry, KylinOS cannot continue the installation. Please feed back the error log below so that we can better solve the problem for you.",
+    "Sorry, Kirin Linux cannot continue the installation. Please report the error log below so the problem can be fixed."
+   ]
+  ]
+ }
+}
